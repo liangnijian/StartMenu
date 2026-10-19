@@ -1,8 +1,9 @@
 # 开始菜单 (StartMenu)
 
-一个用纯 Win32 API + C++ 编写的 Windows 桌面开始菜单启动器。仿照 Windows 开始菜单的交互体验，左侧字母索引、右侧磁贴分组，支持拖拽整理、DPI 自适应、深色主题，单文件即可运行。
+一个用纯 Win32 API + C++ 编写的 Windows 桌面开始菜单启动器。仿照 Windows 10 开始菜单的交互体验，左侧字母索引、右侧磁贴分组，支持拖拽整理、DPI 自适应、深色主题，单文件即可运行。
 
 ---
+
 
 ## ✨ 特性
 
@@ -38,40 +39,9 @@
   - 所有尺寸按 96 DPI 设计，运行时通过 `S()` 按当前 DPI 缩放。
   - 支持 `WM_DPICHANGED`，跨屏拖动自动重排。
 - **分层窗口**：`WS_EX_LAYERED` 半透明背景（238 / 255 不透明度）。
-- **无边框最大化**：最大化时自动对齐到工作区，规避 Win32 无边框窗口常见的溢出问题。
 
 ---
 
-## 🛠 编译
-
-### 环境要求
-- Windows 7 / 8 / 8.1 / 10 / 11
-- Visual Studio 2015+（或任意支持 C++11 的 MSVC 工具链）
-- Windows SDK（建议使用较新的 SDK 以获得 `SetProcessDpiAwarenessContext` 等 API；旧版 SDK 也能编译，代码已做兼容处理）
-
-### 命令行编译
-
-```bat
-cl /std:c++14 /EHsc /O2 /DUNICODE /D_UNICODE 开始菜单.cpp ^
-   /link user32.lib gdi32.lib ole32.lib oleaut32.lib shell32.lib ^
-   shlwapi.lib comctl32.lib uuid.lib /SUBSYSTEM:WINDOWS
-```
-
-### Visual Studio
-
-1. 新建 **Windows 桌面应用程序**（空项目）。
-2. 添加 `开始菜单.cpp`。
-3. 项目属性 → **链接器 → 系统 → 子系统** 设置为 **Windows (/SUBSYSTEM:WINDOWS)**。
-4. 项目属性 → **C/C++ → 语言 → C++ 语言标准** 设置为 **ISO C++14** 或更高。
-5. 编译生成。
-
-### 依赖库
-源码顶部已通过 `#pragma comment(lib, ...)` 声明：
-- `shlwapi.lib` / `shell32.lib` — 路径与 Shell 操作
-- `comctl32.lib` — 通用控件
-- `ole32.lib` / `uuid.lib` — OLE 拖放
-
----
 
 ## 🚀 使用
 
@@ -105,6 +75,7 @@ cl /std:c++14 /EHsc /O2 /DUNICODE /D_UNICODE 开始菜单.cpp ^
 
 ---
 
+
 ## 📄 配置文件格式
 
 配置文件使用 **UTF-16LE + BOM** 编码，保存于程序同目录，采用自定义 `.cfg` 格式：
@@ -129,6 +100,7 @@ name=办公工具
 2|计算器|%SystemRoot%\system32\calc.exe|
 ```
 
+
 ### 字段说明
 
 | 字段 | 说明 |
@@ -144,6 +116,7 @@ name=办公工具
 > 注：`|` 是分隔符，程序保存时会自动把名称 / 参数中的 `|` 替换为空格，避免解析冲突。
 
 ---
+
 
 ## 🧩 技术要点
 
@@ -170,16 +143,6 @@ S(v) = MulDiv(v, g_dpi, 96)
 
 ---
 
-## 📁 项目结构
-
-```
-.
-├── 开始菜单.cpp   # 全部源码（单文件）
-├── logo.ico       # 可选：标题栏 / 任务栏图标
-└── 开始菜单.cfg   # 运行时自动生成
-```
-
----
 
 ## ⚠️ 注意事项
 
@@ -190,6 +153,8 @@ S(v) = MulDiv(v, g_dpi, 96)
 
 ---
 
+
 ## 🙏 致谢
 
 - AI: deepseek
+- 当然，这份文件也是 deepseek 写的
