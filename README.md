@@ -124,33 +124,6 @@ name=办公工具
 
 
 
-## 🧩 技术要点
-
-### DPI 自适应
-```
-S(v) = MulDiv(v, g_dpi, 96)
-```
-所有尺寸常量在 `UpdateDpiSizes()` 中按当前 `g_dpi` 重算，`WM_DPICHANGED` 时重建字体、按比例迁移滚动位置、对齐建议矩形。
-
-### 路径可移植化
-- `ExpandPath()`：读配置时把 `%SystemRoot%` 等变量、相对路径展开为绝对路径。
-- `MakePortable()`：写配置时反向替换，优先使用程序目录相对路径，再尝试环境变量（按长度降序匹配，避免短前缀抢占）。
-
-### 拖放实现
-- **内部拖放**：`g_dragPending` → 移动超过阈值 → `g_dragTile`，`ComputeDropTargetAt()` 计算目标格位与插入模式（`1` = 插入线，`2` = 空格框，`newGroup` = 新建分组），`DropTile()` 执行插入。
-- **外部拖放**：实现 `IDropTarget`（`DragEnter` / `DragOver` / `DragLeave` / `Drop`），`DragOver` 中实时调用 `ComputeDropTargetAt` + `LayoutGroups` 实现拖入过程中的高度动态扩展与高亮。
-- 兜底：`WM_DROPFILES` 也处理一遍，保证即使 OLE 注册失败也能拖入。
-
-### 中文拼音首字母
-通过 GBK 双字节编码区间 + 边界码表（`0xB0A1`, `0xB0C5`, ... `0xD7FA`）映射到 `A-W` 共 23 个拼音首字母，落在表外或非汉字的字符统一归入 `#` 分组。
-
-### 无边框窗口最大化
-在 `WM_NCCALCSIZE` 中把 `rgrc[0]` 强制设为当前显示器工作区，避免传统无边框窗口最大化后溢出任务栏区域、多屏位置错位等问题。
-
----
-
-
-
 ## ⚠️ 注意事项
 
 - 程序依赖 **OLE 初始化**，`OleInitialize` 失败会导致拖放功能不可用。
