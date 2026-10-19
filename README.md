@@ -1,6 +1,7 @@
 # 开始菜单 (StartMenu)
 
-一个用纯 Win32 API + C++ 编写的 Windows 桌面开始菜单启动器。仿照 Windows 10 开始菜单的交互体验，左侧字母索引、右侧磁贴分组，支持拖拽整理、DPI 自适应、深色主题，单文件即可运行。
+
+因为用不习惯 Windows 11 的开始菜单，所以让 deepseek 仿照 Windows 10 的开始菜单写一个程序
 
 ![主界面](docs/main.png)
 ---
