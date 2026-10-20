@@ -157,6 +157,9 @@
   <ItemGroup>
     <ResourceCompile Include="开始菜单.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="logo.ico" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

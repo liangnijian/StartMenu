@@ -33,76 +33,111 @@ static inline int S(int v) { return MulDiv(v, g_dpi, 96); }
 
 // ============================================================
 //  尺寸常量
+//    _BASE 后缀 = 96 DPI 下的原始设计值（永不修改）
+//    无后缀      = 运行时已按 g_dpi 缩放后的实际像素值
+//    UpdateDpiSizes() 每次都从 _BASE 重新计算，避免双重缩放
 // ============================================================
-static int TITLE_H = 40;   // 自绘标题栏高度
-static int BTN_W = 46;   // 标题栏按钮宽度
-static int LIST_W = 280;  // 左侧列表宽度
-static int LETTER_W = 24;   // 字母索引宽度
-static int LETTER_ROW_H = 20;   // 列表内字母分组标题高度
-static int ITEM_H = 38;   // 列表项高度 (32x32 图标专用)
-static int TILE_W = 72;   // 磁贴宽
-static int TILE_H = 72;   // 磁贴高
-static int TILE_GAP = 4;    // 磁贴间距
-static int GROUP_PAD = 8;   // 分组水平内边距（与上下边距保持一致）
-static int GROUP_HDR = 28;   // 分组标题高度
-static int GROUP_GAP = 18;   // 分组之间的间距
+static const int TITLE_H_BASE = 40;   // 自绘标题栏高度
+static const int BTN_W_BASE = 46;   // 标题栏按钮宽度
+static const int LIST_W_BASE = 280;  // 左侧列表宽度
+static const int LETTER_W_BASE = 24;   // 字母索引宽度
+static const int LETTER_ROW_H_BASE = 20;   // 列表内字母分组标题高度
+static const int ITEM_H_BASE = 38;   // 列表项高度 (32x32 图标专用)
+static const int TILE_W_BASE = 72;   // 磁贴宽
+static const int TILE_H_BASE = 72;   // 磁贴高
+static const int TILE_GAP_BASE = 4;    // 磁贴间距
+static const int GROUP_PAD_BASE = 8;   // 分组水平内边距
+static const int GROUP_HDR_BASE = 28;   // 分组标题高度
+static const int GROUP_GAP_BASE = 18;   // 分组之间的间距
 static const int MAX_COLS = 4;    // 每组横向最多磁贴数
 static const int MAX_ROWS = 6;    // 每组竖向最多磁贴数
-static int DEFAULT_W = 982;    // 默认宽度
-static int DEFAULT_H = 680;    // 默认高度
-static int MIN_W = 650;    // 最小宽度
-static int MIN_H = 460;    // 最小高度
+static const int DEFAULT_W = 982;    // 默认宽度（逻辑单位，wWinMain 中手动 MulDiv）
+static const int DEFAULT_H = 680;    // 默认高度（逻辑单位，wWinMain 中手动 MulDiv）
+static const int MIN_W_BASE = 650;    // 最小宽度
+static const int MIN_H_BASE = 460;    // 最小高度
 
 // 滚动条尺寸
-static int SCROLLBAR_W = 8;    // 滚动条宽度
-static int SCROLLBAR_PAD = 4;    // 上下边距
-static int SCROLLBAR_MIN_THUMB = 20;  // 滑块最小高度
+static const int SCROLLBAR_W_BASE = 8;    // 滚动条宽度
+static const int SCROLLBAR_PAD_BASE = 4;    // 上下边距
+static const int SCROLLBAR_MIN_THUMB_BASE = 20;   // 滑块最小高度
 
 // 重命名对话框尺寸
-static int DLG_W = 400;
-static int DLG_H = 180;
-static int DLG_TITLE_H = 34;
-static int DLG_MARGIN = 20;
-static int DLG_BTN_W = 76;
-static int DLG_BTN_H = 30;
+static const int DLG_W_BASE = 400;
+static const int DLG_H_BASE = 180;
+static const int DLG_TITLE_H_BASE = 34;
+static const int DLG_MARGIN_BASE = 20;
+static const int DLG_BTN_W_BASE = 76;
+static const int DLG_BTN_H_BASE = 30;
 
 // 右键菜单尺寸
-static int MENU_ITEM_H = 32;
-static int MENU_PAD = 4;
-static int MENU_W = 168;
+static const int MENU_ITEM_H_BASE = 32;
+static const int MENU_PAD_BASE = 4;
+static const int MENU_W_BASE = 168;
 
-// 按当前 g_dpi 重新计算所有尺寸常量
+// 运行时尺寸（经 S() 缩放）
+static int TITLE_H = TITLE_H_BASE;
+static int BTN_W = BTN_W_BASE;
+static int LIST_W = LIST_W_BASE;
+static int LETTER_W = LETTER_W_BASE;
+static int LETTER_ROW_H = LETTER_ROW_H_BASE;
+static int ITEM_H = ITEM_H_BASE;
+static int TILE_W = TILE_W_BASE;
+static int TILE_H = TILE_H_BASE;
+static int TILE_GAP = TILE_GAP_BASE;
+static int GROUP_PAD = GROUP_PAD_BASE;
+static int GROUP_HDR = GROUP_HDR_BASE;
+static int GROUP_GAP = GROUP_GAP_BASE;
+static int MIN_W = MIN_W_BASE;
+static int MIN_H = MIN_H_BASE;
+
+static int SCROLLBAR_W = SCROLLBAR_W_BASE;
+static int SCROLLBAR_PAD = SCROLLBAR_PAD_BASE;
+static int SCROLLBAR_MIN_THUMB = SCROLLBAR_MIN_THUMB_BASE;
+
+static int DLG_W = DLG_W_BASE;
+static int DLG_H = DLG_H_BASE;
+static int DLG_TITLE_H = DLG_TITLE_H_BASE;
+static int DLG_MARGIN = DLG_MARGIN_BASE;
+static int DLG_BTN_W = DLG_BTN_W_BASE;
+static int DLG_BTN_H = DLG_BTN_H_BASE;
+
+static int MENU_ITEM_H = MENU_ITEM_H_BASE;
+static int MENU_PAD = MENU_PAD_BASE;
+static int MENU_W = MENU_W_BASE;
+
+// 按当前 g_dpi 从 _BASE 原始值重新计算所有尺寸常量
+// ★ 关键修复：每次从 _BASE 计算，即便多次调用也不会双重缩放
 static void UpdateDpiSizes()
 {
-    TITLE_H = S(TITLE_H);
-    BTN_W = S(BTN_W);
-    LIST_W = S(LIST_W);
-    LETTER_W = S(LETTER_W);
-    LETTER_ROW_H = S(LETTER_ROW_H);
-    ITEM_H = S(ITEM_H);
-    TILE_W = S(TILE_W);
-    TILE_H = S(TILE_H);
-    TILE_GAP = S(TILE_GAP);
-    GROUP_PAD = S(GROUP_PAD);
-    GROUP_HDR = S(GROUP_HDR);
-    GROUP_GAP = S(GROUP_GAP);
-    MIN_W = S(MIN_W);
-    MIN_H = S(MIN_H);
+    TITLE_H = S(TITLE_H_BASE);
+    BTN_W = S(BTN_W_BASE);
+    LIST_W = S(LIST_W_BASE);
+    LETTER_W = S(LETTER_W_BASE);
+    LETTER_ROW_H = S(LETTER_ROW_H_BASE);
+    ITEM_H = S(ITEM_H_BASE);
+    TILE_W = S(TILE_W_BASE);
+    TILE_H = S(TILE_H_BASE);
+    TILE_GAP = S(TILE_GAP_BASE);
+    GROUP_PAD = S(GROUP_PAD_BASE);
+    GROUP_HDR = S(GROUP_HDR_BASE);
+    GROUP_GAP = S(GROUP_GAP_BASE);
+    MIN_W = S(MIN_W_BASE);
+    MIN_H = S(MIN_H_BASE);
 
-    SCROLLBAR_W = S(SCROLLBAR_W);
-    SCROLLBAR_PAD = S(SCROLLBAR_PAD);
-    SCROLLBAR_MIN_THUMB = S(SCROLLBAR_MIN_THUMB);
+    SCROLLBAR_W = S(SCROLLBAR_W_BASE);
+    SCROLLBAR_PAD = S(SCROLLBAR_PAD_BASE);
+    SCROLLBAR_MIN_THUMB = S(SCROLLBAR_MIN_THUMB_BASE);
 
-    DLG_W = S(DLG_W);
-    DLG_H = S(DLG_H);
-    DLG_TITLE_H = S(DLG_TITLE_H);
-    DLG_MARGIN = S(DLG_MARGIN);
-    DLG_BTN_W = S(DLG_BTN_W);
-    DLG_BTN_H = S(DLG_BTN_H);
+    DLG_W = S(DLG_W_BASE);
+    DLG_H = S(DLG_H_BASE);
+    DLG_TITLE_H = S(DLG_TITLE_H_BASE);
+    DLG_MARGIN = S(DLG_MARGIN_BASE);
+    DLG_BTN_W = S(DLG_BTN_W_BASE);
+    DLG_BTN_H = S(DLG_BTN_H_BASE);
 
-    MENU_ITEM_H = S(MENU_ITEM_H);
-    MENU_PAD = S(MENU_PAD);
-    MENU_W = S(MENU_W);
+    MENU_ITEM_H = S(MENU_ITEM_H_BASE);
+    MENU_PAD = S(MENU_PAD_BASE);
+    MENU_W = S(MENU_W_BASE);
 }
 
 // 兼容旧版 SDK 的 DPI_AWARENESS_CONTEXT 常量定义
@@ -325,6 +360,7 @@ static void SaveConfig();
 static void ShowMissingFilesDialog(const std::vector<int>& items);
 static bool FileExistsForItem(const Item& it);
 static void CheckAllItems();
+static bool EnsureItemAvailable(int itemIdx);
 
 // ============================================================
 //  工具函数
@@ -598,6 +634,25 @@ static void CheckAllItems()
         it.missing = !FileExistsForItem(it);
 }
 
+// 统一封装「检查文件是否存在 → 缺失则弹窗」逻辑
+// 返回 true 表示文件可用，可以继续执行；false 表示已弹出缺失提示
+static bool EnsureItemAvailable(int itemIdx)
+{
+    if (itemIdx < 0 || itemIdx >= (int)g_items.size()) return false;
+    Item& it = g_items[itemIdx];
+    if (!FileExistsForItem(it))
+    {
+        it.missing = true;
+        if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+        std::vector<int> v;
+        v.push_back(itemIdx);
+        ShowMissingFilesDialog(v);
+        return false;
+    }
+    it.missing = false;
+    return true;
+}
+
 // ============================================================
 //  滚动条位置计算
 // ============================================================
@@ -698,7 +753,8 @@ static Item BuildItem(const std::wstring& displayName,
         }
     }
     it.hIcon = GetItemIcon(it.path);
-    if (!it.hIcon) it.hIcon = GetItemIcon(expandedPath);
+    // 微优化：仅当路径被 .lnk 解析替换后才需要第二次图标查找
+    if (!it.hIcon && it.path != expandedPath) it.hIcon = GetItemIcon(expandedPath);
     it.missing = !FileExistsForItem(it);
     return it;
 }
@@ -1043,22 +1099,9 @@ static int HitGroupTitle(POINT pt)
 // ============================================================
 static void LaunchItem(int idx)
 {
-    if (idx < 0 || idx >= (int)g_items.size()) return;
+    if (!EnsureItemAvailable(idx)) return;
+
     Item& it = g_items[idx];
-
-    // 运行时检查文件是否存在（路径可能在程序运行期间被修改/删除）
-    if (!FileExistsForItem(it))
-    {
-        it.missing = true;
-        if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
-
-        std::vector<int> v;
-        v.push_back(idx);
-        ShowMissingFilesDialog(v);
-        return;
-    }
-    it.missing = false;
-
     std::wstring full = ExpandPath(it.path);
     HINSTANCE r = ShellExecuteW(nullptr, L"open", full.c_str(),
         it.args.empty() ? nullptr : it.args.c_str(),
@@ -1458,24 +1501,14 @@ static void DoMenuAction(int itemIdx, int action)
     }
     else if (action == 1)
     {
-        Item& it = g_items[itemIdx];
-        // 运行时检查文件是否存在（路径可能在程序运行期间被修改/删除）
-        if (!FileExistsForItem(it))
-        {
-            it.missing = true;
-            if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
-
-            std::vector<int> v;
-            v.push_back(itemIdx);
-            ShowMissingFilesDialog(v);
-            return;
-        }
-        it.missing = false;
-        OpenFileLocation(it.path);
+        // 复用统一的存在性检查与缺失弹窗
+        if (!EnsureItemAvailable(itemIdx)) return;
+        OpenFileLocation(g_items[itemIdx].path);
     }
     else if (action == 2)
     {
         RemoveItem(itemIdx);   // RemoveItem 内部已调用 LayoutGroups
+        SaveConfig();          // ★ 新增：移除快捷方式后立即写入 cfg，不必等关闭程序
         InvalidateRect(g_hWnd, nullptr, FALSE);
     }
 }
@@ -1575,6 +1608,7 @@ static LRESULT CALLBACK MenuProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_DESTROY:
         if (g_hMenu == hwnd) g_hMenu = nullptr;
         g_menuPressedIdx = -1;
+        g_menuTargetItem = -1;   // 清理残留
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -1853,6 +1887,7 @@ static LRESULT CALLBACK RenameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (g_dlgItem >= 0 && g_dlgItem < (int)g_items.size() && buf[0])
                 g_items[g_dlgItem].name = buf;
             RebuildList();
+            SaveConfig();          // ★ 新增：重命名后立即写入 cfg，不必等关闭程序
             InvalidateRect(g_hWnd, nullptr, FALSE);
             DestroyWindow(hwnd);
         }
@@ -1877,6 +1912,7 @@ static LRESULT CALLBACK RenameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         g_hDlgEdit = nullptr;
         g_dlgHoverBtn = -1;
         g_dlgPressedBtn = -1;
+        g_dlgItem = -1;          // 清理残留
         if (g_hWnd)
         {
             EnableWindow(g_hWnd, TRUE);
@@ -2126,6 +2162,7 @@ static LRESULT CALLBACK MissingDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         g_hMissingDlg = nullptr;
         g_missingDlgHoverBtn = -1;
         g_missingDlgPressedBtn = -1;
+        g_missingDlgItems.clear();    // 清理残留
         if (g_hWnd)
         {
             EnableWindow(g_hWnd, TRUE);
@@ -2755,19 +2792,71 @@ static void UpdateGroupDrag(POINT pt)
 // ============================================================
 //  配置读写（自定义 .cfg 格式）
 //    窗口宽高按 96 DPI 逻辑单位保存，跨 DPI 迁移时观感一致
+//    窗口最大化（或最小化）时只记录 Maximized 标志，保留原有 Width/Height/X/Y
 // ============================================================
+
+// 从配置内容中提取 [Window] 段内指定键的原始行（如 "Width=982"），不存在则返回空串
+static std::wstring GetWindowKeyLine(const std::wstring& content, const std::wstring& key)
+{
+    if (content.empty() || key.empty()) return L"";
+    std::wstringstream ss(content);
+    std::wstring line;
+    bool inWin = false;
+    while (std::getline(ss, line))
+    {
+        // 去掉行尾的 \r / \n / 空白
+        while (!line.empty() &&
+            (line.back() == L'\r' || line.back() == L'\n' ||
+                line.back() == L' ' || line.back() == L'\t'))
+            line.pop_back();
+
+        if (line == L"[Window]") { inWin = true; continue; }
+        if (!line.empty() && line[0] == L'[') { inWin = false; continue; }
+
+        if (inWin && line.size() >= key.size() &&
+            line.compare(0, key.size(), key) == 0)
+        {
+            return line;
+        }
+    }
+    return L"";
+}
+
 static void SaveConfig()
 {
     RECT rc; GetWindowRect(g_hWnd, &rc);
-    int logicalW = MulDiv(rc.right - rc.left, 96, g_dpi);
-    int logicalH = MulDiv(rc.bottom - rc.top, 96, g_dpi);
+    bool maximized = IsZoomed(g_hWnd) != FALSE;
+    bool minimized = IsIconic(g_hWnd) != FALSE;
 
     std::wstringstream ss;
     ss << L"[Window]\n";
-    ss << L"Width=" << logicalW << L"\n";
-    ss << L"Height=" << logicalH << L"\n";
-    ss << L"X=" << rc.left << L"\n";
-    ss << L"Y=" << rc.top << L"\n";
+    // 记录是否处于最大化，用于下次启动时还原窗口状态
+    ss << L"Maximized=" << (maximized ? 1 : 0) << L"\n";
+
+    if (!maximized && !minimized)
+    {
+        // 正常状态：写入当前尺寸 / 位置（按 96 DPI 逻辑单位保存）
+        int logicalW = MulDiv(rc.right - rc.left, 96, g_dpi);
+        int logicalH = MulDiv(rc.bottom - rc.top, 96, g_dpi);
+        ss << L"Width=" << logicalW << L"\n";
+        ss << L"Height=" << logicalH << L"\n";
+        ss << L"X=" << rc.left << L"\n";
+        ss << L"Y=" << rc.top << L"\n";
+    }
+    else
+    {
+        // 最大化 / 最小化：不覆盖已有的 Width / Height / X / Y。
+        // 若旧配置中这些键存在，则原样保留；若不存在，则不写入。
+        std::wstring old = ReadAllText(g_cfgPath);
+        std::wstring wLine = GetWindowKeyLine(old, L"Width=");
+        std::wstring hLine = GetWindowKeyLine(old, L"Height=");
+        std::wstring xLine = GetWindowKeyLine(old, L"X=");
+        std::wstring yLine = GetWindowKeyLine(old, L"Y=");
+        if (!wLine.empty()) ss << wLine << L"\n";
+        if (!hLine.empty()) ss << hLine << L"\n";
+        if (!xLine.empty()) ss << xLine << L"\n";
+        if (!yLine.empty()) ss << yLine << L"\n";
+    }
 
     for (size_t gi = 0; gi < g_groups.size(); ++gi) {
         const auto& group = g_groups[gi];
@@ -2901,6 +2990,8 @@ static void ToggleMaximize()
         ShowWindow(g_hWnd, SW_RESTORE);
     else
         ShowWindow(g_hWnd, SW_MAXIMIZE);
+    // 最大化/还原状态变化后，立即更新配置文件
+    SaveConfig();
 }
 
 static void ScrollToLetter(wchar_t c)
@@ -2934,11 +3025,6 @@ static void UpdateHover(POINT pt)
     HitTile(pt, tg, ti);
     g_hoverTileG = tg;
     g_hoverTileI = ti;
-}
-
-static void HandleDroppedFiles(const std::vector<std::wstring>& files, POINT ptClient)
-{
-    ProcessDroppedFiles(files, ptClient);
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -3033,6 +3119,31 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         LayoutGroups();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
+    }
+
+    // ========================================================
+    //  用户拖动调整大小或移动窗口结束后，立即保存窗口配置
+    // ========================================================
+    case WM_EXITSIZEMOVE:
+    {
+        SaveConfig();
+        return 0;
+    }
+
+    // ========================================================
+    //  拦截系统菜单触发的最大化 / 还原（例如任务栏右键菜单、
+    //  Alt+Space 系统菜单等），处理完成后立即保存窗口配置
+    // ========================================================
+    case WM_SYSCOMMAND:
+    {
+        UINT cmd = (UINT)(wp & 0xFFF0);
+        if (cmd == SC_MAXIMIZE || cmd == SC_RESTORE)
+        {
+            LRESULT r = DefWindowProcW(hwnd, msg, wp, lp);
+            SaveConfig();
+            return r;
+        }
+        break;
     }
 
     case WM_GETMINMAXINFO:
@@ -3556,7 +3667,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         POINT pt; DragQueryPoint(hd, &pt);
         DragFinish(hd);
 
-        HandleDroppedFiles(files, pt);
+        // 直接调用 ProcessDroppedFiles（原 HandleDroppedFiles 仅为一行转发，已删除）
+        ProcessDroppedFiles(files, pt);
         return 0;
     }
 
@@ -3570,6 +3682,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
 
     case WM_CLOSE:
+        // 关闭前若仍处于分组名行内编辑状态，先提交
+        if (g_hEdit) EndEditGroupName(true);
         SaveConfig();
         DestroyWindow(hwnd);
         return 0;
@@ -3596,6 +3710,56 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
 {
     g_hInst = hInst;
 
+    // ========================================================
+    //  ★ 新增：单实例检查
+    //  若已存在运行中的实例，把它的窗口激活到前台，然后直接退出。
+    //  互斥量名默认即为 Local 命名空间（当前登录会话）。
+    // ========================================================
+    HANDLE hSingleMutex = CreateMutexW(nullptr, FALSE,
+        L"SMStartMenu_SingleInstance");
+    if (hSingleMutex && GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        // 轮询等待已运行实例的主窗口出现（最多约 1 秒），避免先启动进程
+        // 还在初始化阶段时因 FindWindow 找不到而误判
+        HWND hPrev = nullptr;
+        for (int i = 0; i < 20 && !hPrev; i++)
+        {
+            hPrev = FindWindowW(L"SMStartMenu", nullptr);
+            if (!hPrev) Sleep(50);
+        }
+
+        if (hPrev)
+        {
+            // 若最小化，先还原；否则仅保证可见
+            if (IsIconic(hPrev))
+                ShowWindow(hPrev, SW_RESTORE);
+            else
+                ShowWindow(hPrev, SW_SHOW);
+
+            // 尝试激活到前台
+            SetForegroundWindow(hPrev);
+
+            // 某些场景下（如另一个进程正在前台）SetForegroundWindow 会失败，
+            // 用 AttachThreadInput 短暂附加到前台线程作为兜底
+            if (GetForegroundWindow() != hPrev)
+            {
+                DWORD fgThread = GetWindowThreadProcessId(
+                    GetForegroundWindow(), nullptr);
+                DWORD myThread = GetCurrentThreadId();
+                if (fgThread && fgThread != myThread)
+                {
+                    AttachThreadInput(myThread, fgThread, TRUE);
+                    SetForegroundWindow(hPrev);
+                    BringWindowToTop(hPrev);
+                    AttachThreadInput(myThread, fgThread, FALSE);
+                }
+            }
+        }
+
+        CloseHandle(hSingleMutex);
+        return 0;
+    }
+
     // 第一步：在创建任何窗口之前启用 DPI 感知
     // （Win7/8.1/10+ 会自动选用最合适的一种）
     EnableDpiAwareness();
@@ -3611,6 +3775,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
     // OLE 初始化（RegisterDragDrop 需要 OLE 初始化）
     if (FAILED(OleInitialize(nullptr)))
     {
+        if (hSingleMutex) CloseHandle(hSingleMutex);
         return 0;
     }
     InitCommonControls();
@@ -3624,12 +3789,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
     std::wstring baseName = StripExt(exeName);
     g_cfgPath = g_exeDir + L"\\" + baseName + L".cfg";
 
-    std::wstring icoPath = g_exeDir + L"\\logo.ico";
-    g_hIconBig = (HICON)LoadImageW(nullptr, icoPath.c_str(), IMAGE_ICON, S(32), S(32), LR_LOADFROMFILE);
-    g_hIconSmall = (HICON)LoadImageW(nullptr, icoPath.c_str(), IMAGE_ICON, S(16), S(16), LR_LOADFROMFILE);
-
-    if (!g_hIconBig)   g_hIconBig = LoadIconW(hInst, MAKEINTRESOURCEW(1));
-    if (!g_hIconSmall) g_hIconSmall = LoadIconW(hInst, MAKEINTRESOURCEW(1));
+    // 使用程序内嵌的资源图标作为标题栏和任务栏图标
+    g_hIconBig = LoadIconW(hInst, MAKEINTRESOURCEW(1));
+    g_hIconSmall = LoadIconW(hInst, MAKEINTRESOURCEW(1));
 
     if (!g_hIconBig)   g_hIconBig = LoadIconW(nullptr, IDI_APPLICATION);
     if (!g_hIconSmall) g_hIconSmall = LoadIconW(nullptr, IDI_APPLICATION);
@@ -3678,6 +3840,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
 
     int w = MulDiv(DEFAULT_W, g_dpi, 96), h = MulDiv(DEFAULT_H, g_dpi, 96);
     int x = -10000, y = -10000;
+    bool startMaximized = false;   // 上次关闭时窗口是否处于最大化状态
     std::wstring winContent = ReadAllText(g_cfgPath);
     if (!winContent.empty()) {
         std::wstringstream ss(winContent);
@@ -3687,11 +3850,17 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
             if (line == L"[Window]") { inWin = true; continue; }
             if (!line.empty() && line[0] == L'[' && line != L"[Window]") { inWin = false; }
             if (inWin) {
-                // 配置文件中的宽高保存为 96 DPI 逻辑单位，此处还原为物理像素
-                if (line.find(L"Width=") == 0) w = MulDiv(_wtoi(line.substr(6).c_str()), g_dpi, 96);
-                else if (line.find(L"Height=") == 0) h = MulDiv(_wtoi(line.substr(7).c_str()), g_dpi, 96);
-                else if (line.find(L"X=") == 0) x = _wtoi(line.substr(2).c_str());
-                else if (line.find(L"Y=") == 0) y = _wtoi(line.substr(2).c_str());
+                // 读取最大化状态；宽高保存在配置文件中为 96 DPI 逻辑单位，此处还原为物理像素
+                if (line.find(L"Maximized=") == 0)
+                    startMaximized = (_wtoi(line.substr(10).c_str()) != 0);
+                else if (line.find(L"Width=") == 0)
+                    w = MulDiv(_wtoi(line.substr(6).c_str()), g_dpi, 96);
+                else if (line.find(L"Height=") == 0)
+                    h = MulDiv(_wtoi(line.substr(7).c_str()), g_dpi, 96);
+                else if (line.find(L"X=") == 0)
+                    x = _wtoi(line.substr(2).c_str());
+                else if (line.find(L"Y=") == 0)
+                    y = _wtoi(line.substr(2).c_str());
             }
         }
     }
@@ -3713,6 +3882,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
     if (!g_hWnd)
     {
         OleUninitialize();
+        if (hSingleMutex) CloseHandle(hSingleMutex);
         return 0;
     }
 
@@ -3738,12 +3908,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
     LayoutGroups();
 
     // 创建后核对一次 DPI（多显示器下窗口可能落在不同 DPI 的屏幕上）
+    // ★ 修复：若窗口实际 DPI 与初始不同，必须重新计算尺寸并重建字体，
+    //        否则字体 / 布局仍按错误 DPI 缩放
     {
         UINT d = GetWindowDpiCompat(g_hWnd);
-        if (d && (int)d != g_dpi) g_dpi = (int)d;
+        if (d && (int)d != g_dpi)
+        {
+            g_dpi = (int)d;
+            UpdateDpiSizes();
+            CreateFonts();
+            LayoutGroups();
+        }
     }
 
-    ShowWindow(g_hWnd, SW_SHOW);
+    // 若上次关闭时处于最大化状态，则直接以最大化显示
+    ShowWindow(g_hWnd, startMaximized ? SW_SHOWMAXIMIZED : SW_SHOW);
     UpdateWindow(g_hWnd);
 
     // ============================================================
@@ -3762,5 +3941,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
     DestroyFonts();
 
     OleUninitialize();
+
+    // 释放单实例互斥量（进程结束也会自动释放，这里显式关闭更清晰）
+    if (hSingleMutex) CloseHandle(hSingleMutex);
+
     return 0;
 }
