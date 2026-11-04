@@ -15,6 +15,8 @@
 #include <fstream>
 #include <sstream>
 #include <functional>
+#include <cmath>
+#include <cwctype>
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "comctl32.lib")
@@ -60,6 +62,31 @@ static const int MIN_H_BASE = 460;    // 最小高度
 static const int SCROLLBAR_W_BASE = 8;    // 滚动条宽度
 static const int SCROLLBAR_PAD_BASE = 4;    // 上下边距
 static const int SCROLLBAR_MIN_THUMB_BASE = 20;   // 滑块最小高度
+
+// 搜索框尺寸（位于右侧磁贴区域底部，左右居中）
+static const int SEARCH_W_BASE = 340;      // 搜索框宽度
+static const int SEARCH_H_BASE = 34;       // 搜索框高度（两端为半圆）
+static const int SEARCH_BOTTOM_BASE = 16;  // 搜索框距窗口底部的距离
+static const int SEARCH_GAP_BASE = 12;     // 搜索框顶部与磁贴内容的间隙
+static const int SEARCH_ICON_BASE = 18;    // 搜索框右侧图标尺寸（放大镜 / 叉）
+static const int GEAR_ICON_BASE = 20;      // 齿轮图标尺寸（按钮直径与搜索框高度一致）
+
+// 设置窗口尺寸
+static const int SET_W_BASE = 620;
+static const int SET_H_BASE = 440;
+static const int SET_NAV_W_BASE = 150;     // 左侧选项列表宽度
+static const int SET_NAV_ITEM_H_BASE = 42;
+static const int SET_SWITCH_W_BASE = 46;   // 开关宽度
+static const int SET_SWITCH_H_BASE = 24;   // 开关高度
+static const int SET_TRACK_H_BASE = 10;    // 滑条高度（比搜索框矮）
+static const int SET_KNOB_R_BASE = 8;      // 滑条圆点半径
+
+// 主题默认值（可在 .cfg 的 [Color] 段中保存）
+static const int  THEME_OPACITY_DEF = 94;   // 窗口不透明度 0~100
+static const int  THEME_HUE_DEF = 220;      // 主题色相 0~360
+static const int  THEME_BRIGHT_DEF = 10;    // 颜色亮度 0~100
+static const bool THEME_GRAYMODE_DEF = true; // 默认开启黑白模式
+static const int  THEME_GRAY_DEF = 20;      // 黑白模式默认灰度 0~100
 
 // 重命名对话框尺寸
 static const int DLG_W_BASE = 400;
@@ -320,12 +347,81 @@ static int   g_dragGroupIdx = -1;
 static HWND  g_hEdit = nullptr;
 static int   g_editGroup = -1;
 
+// 搜索框（右侧磁贴区域底部）
+//   输入内容后，列表与磁贴中名称包含该内容的项背景高亮为橙黄色
+static HWND         g_hSearchEdit = nullptr;   // 搜索输入框（EDIT 子窗口）
+static std::wstring g_searchText;              // 当前搜索内容（空表示未搜索）
+static bool         g_hoverSearch = false;     // 鼠标是否悬停在搜索框上
+static bool         g_hoverSearchClear = false;// 鼠标是否悬停在搜索框右侧的叉上
+static bool         g_searchComposing = false; // 搜索框是否正在输入法组字
+static bool         g_hoverSettingsBtn = false;// 鼠标是否悬停在齿轮设置按钮上
+
+// 主题（保存于 .cfg 的 [Color] 段）
+static int      g_winOpacity = THEME_OPACITY_DEF;  // 窗口不透明度 0~100
+static int      g_themeHue = THEME_HUE_DEF;        // 主题色相 0~360
+static int      g_themeBright = THEME_BRIGHT_DEF;  // 颜色亮度 0~100
+static bool     g_grayMode = THEME_GRAYMODE_DEF;   // 黑白模式
+static int      g_grayLevel = THEME_GRAY_DEF;      // 黑白模式下的灰度 0~100
+static COLORREF g_themeBg = RGB(22, 22, 25);       // 由上面几个值算出的窗口背景色
+
+// 由主题色派生出的整套界面配色（标题栏 / 列表 / 磁贴 / 对话框等）
+static bool     g_themeLight = false;              // 当前主题是否为浅色
+static COLORREF g_uiTitle = RGB(32, 32, 36);
+static COLORREF g_uiTitleHot = RGB(60, 60, 66);
+static COLORREF g_uiList = RGB(28, 28, 31);
+static COLORREF g_uiHover = RGB(48, 48, 54);
+static COLORREF g_uiCard = RGB(34, 34, 38);
+static COLORREF g_uiTile = RGB(42, 42, 48);
+static COLORREF g_uiTileHot = RGB(60, 60, 68);
+static COLORREF g_uiSurface = RGB(45, 45, 52);
+static COLORREF g_uiSurfaceBorder = RGB(70, 70, 82);
+static COLORREF g_uiSurfaceBorderHover = RGB(112, 112, 128);
+static COLORREF g_uiText = RGB(232, 232, 236);
+static COLORREF g_uiTextDim = RGB(185, 185, 195);
+static COLORREF g_uiTextFaint = RGB(145, 145, 158);
+static COLORREF g_uiAccentText = RGB(120, 190, 255);
+static COLORREF g_uiIcon = RGB(176, 176, 188);
+static COLORREF g_uiSeparator = RGB(48, 48, 54);
+static COLORREF g_uiScrollTrack = RGB(42, 42, 48);
+static COLORREF g_uiScrollThumb = RGB(90, 90, 100);
+static COLORREF g_uiScrollThumbHot = RGB(140, 140, 155);
+static COLORREF g_uiDialogBg = RGB(34, 34, 38);
+static COLORREF g_uiNavSel = RGB(56, 56, 64);
+static COLORREF g_uiNavHover = RGB(45, 45, 52);
+static COLORREF g_uiBtn = RGB(55, 55, 62);
+static COLORREF g_uiBtnHot = RGB(70, 70, 80);
+static COLORREF g_uiSwitchOff = RGB(72, 72, 82);
+static HBRUSH   g_hbrEdit = nullptr;               // 输入框背景刷（随主题更新）
+
+// 托盘模式
+static bool  g_trayMode = false;
+static bool  g_reallyExit = false;         // true 表示真正退出（托盘菜单「退出」）
+static bool  g_trayIconAdded = false;
+static HHOOK g_kbHook = nullptr;
+static bool  g_kbCtrlDown = false;
+static bool  g_kbWinDown = false;
+static bool  g_kbChordOther = false;       // 组合键过程中按了其它键
+static bool  g_kbChordDone = false;        // 本次组合键已经触发过
+static UINT  g_wmTaskbarCreated = 0;
+static bool  g_mainWasActive = false;      // 主窗口是否曾经真正激活（避免启动即被隐藏）
+
+#define WM_TRAYICON     (WM_APP + 110)
+#define WM_TOGGLE_MAIN  (WM_APP + 111)
+
+// 设置窗口
+static HWND g_hSettings = nullptr;
+static int  g_setPage = 0;                 // 0=窗口模式 1=主题调节
+static int  g_setHover = -1;               // 悬停控件 id
+static int  g_setPressed = -1;             // 按下控件 id
+static int  g_setDragSlider = -1;          // 正在拖动的滑条 0~2
+
 // 右键菜单
 static HWND  g_hMenu = nullptr;
 static std::vector<std::wstring> g_menuItems;
 static int   g_menuHover = -1;
 static int   g_menuPressedIdx = -1;
 static int   g_menuTargetItem = -1;
+static int   g_menuMode = 0;   // 0=快捷方式右键菜单 1=托盘图标菜单
 
 // 重命名对话框（自绘、直角）
 static HWND  g_hDlg = nullptr;
@@ -361,6 +457,11 @@ static void ShowMissingFilesDialog(const std::vector<int>& items);
 static bool FileExistsForItem(const Item& it);
 static void CheckAllItems();
 static bool EnsureItemAvailable(int itemIdx);
+static void ShowMainWindow();
+static void HideMainWindow();
+static void ExitApplication();
+static void ApplyTrayMode(bool enable);
+static void ShowSettingsDialog();
 
 // ============================================================
 //  工具函数
@@ -654,6 +755,306 @@ static bool EnsureItemAvailable(int itemIdx)
 }
 
 // ============================================================
+//  主题（窗口背景色 / 不透明度）
+// ============================================================
+static void HSVToRGB(double h, double s, double v, int& r, int& g, int& b)
+{
+    if (h < 0.0) h = 0.0;
+    h = fmod(h, 360.0);
+    if (s < 0.0) s = 0.0;
+    if (s > 1.0) s = 1.0;
+    if (v < 0.0) v = 0.0;
+    if (v > 1.0) v = 1.0;
+
+    double c = v * s;
+    double x = c * (1.0 - fabs(fmod(h / 60.0, 2.0) - 1.0));
+    double m = v - c;
+    double rr = 0, gg = 0, bb = 0;
+
+    if (h < 60)       { rr = c; gg = x; }
+    else if (h < 120) { rr = x; gg = c; }
+    else if (h < 180) { gg = c; bb = x; }
+    else if (h < 240) { gg = x; bb = c; }
+    else if (h < 300) { rr = x; bb = c; }
+    else              { rr = c; bb = x; }
+
+    r = (int)((rr + m) * 255.0 + 0.5);
+    g = (int)((gg + m) * 255.0 + 0.5);
+    b = (int)((bb + m) * 255.0 + 0.5);
+}
+
+static COLORREF MixColor(COLORREF a, COLORREF b, double t)
+{
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    int r = (int)(GetRValue(a) * (1.0 - t) + GetRValue(b) * t + 0.5);
+    int g = (int)(GetGValue(a) * (1.0 - t) + GetGValue(b) * t + 0.5);
+    int b2 = (int)(GetBValue(a) * (1.0 - t) + GetBValue(b) * t + 0.5);
+    return RGB(r, g, b2);
+}
+
+static COLORREF LightenC(COLORREF c, double t)
+{
+    return MixColor(c, RGB(255, 255, 255), t);
+}
+
+static COLORREF DarkenC(COLORREF c, double t)
+{
+    return MixColor(c, RGB(0, 0, 0), t);
+}
+
+// 由色相/亮度（或黑白模式下的灰度/亮度）算出主题底色
+static COLORREF ThemeColorAt(int hue, int bright)
+{
+    if (g_grayMode)
+    {
+        double gv = (g_grayLevel / 100.0) * (bright / 100.0);
+        int v = (int)(gv * 255.0 + 0.5);
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+        return RGB(v, v, v);
+    }
+
+    int r, g, b;
+    HSVToRGB((double)hue, 0.45, bright / 100.0, r, g, b);
+    return RGB(r, g, b);
+}
+
+// 根据主题底色派生所有界面元素颜色（标题栏、列表、磁贴、对话框……）
+static void UpdateThemeColor()
+{
+    g_themeBg = ThemeColorAt(g_themeHue, g_themeBright);
+
+    int lum = (GetRValue(g_themeBg) * 299 + GetGValue(g_themeBg) * 587 +
+        GetBValue(g_themeBg) * 114) / 1000;
+    g_themeLight = (lum > 140);
+
+    if (g_themeLight)
+    {
+        g_uiTitle = DarkenC(g_themeBg, 0.12);
+        g_uiTitleHot = DarkenC(g_themeBg, 0.22);
+        g_uiList = DarkenC(g_themeBg, 0.07);
+        g_uiHover = DarkenC(g_themeBg, 0.12);
+        g_uiCard = DarkenC(g_themeBg, 0.10);
+        g_uiTile = DarkenC(g_themeBg, 0.16);
+        g_uiTileHot = DarkenC(g_themeBg, 0.26);
+        g_uiSurface = DarkenC(g_themeBg, 0.18);
+        g_uiSurfaceBorder = DarkenC(g_themeBg, 0.45);
+        g_uiSurfaceBorderHover = DarkenC(g_themeBg, 0.62);
+        g_uiText = RGB(26, 26, 30);
+        g_uiTextDim = RGB(60, 60, 68);
+        g_uiTextFaint = RGB(100, 100, 110);
+        g_uiAccentText = RGB(0, 110, 200);
+        g_uiIcon = RGB(90, 90, 100);
+        g_uiSeparator = DarkenC(g_themeBg, 0.25);
+        g_uiScrollTrack = DarkenC(g_themeBg, 0.15);
+        g_uiScrollThumb = DarkenC(g_themeBg, 0.45);
+        g_uiScrollThumbHot = DarkenC(g_themeBg, 0.62);
+        g_uiDialogBg = DarkenC(g_themeBg, 0.08);
+        g_uiNavSel = DarkenC(g_themeBg, 0.18);
+        g_uiNavHover = DarkenC(g_themeBg, 0.12);
+        g_uiBtn = DarkenC(g_themeBg, 0.18);
+        g_uiBtnHot = DarkenC(g_themeBg, 0.28);
+        g_uiSwitchOff = DarkenC(g_themeBg, 0.35);
+    }
+    else
+    {
+        g_uiTitle = LightenC(g_themeBg, 0.06);
+        g_uiTitleHot = LightenC(g_themeBg, 0.16);
+        g_uiList = LightenC(g_themeBg, 0.03);
+        g_uiHover = LightenC(g_themeBg, 0.09);
+        g_uiCard = LightenC(g_themeBg, 0.05);
+        g_uiTile = LightenC(g_themeBg, 0.08);
+        g_uiTileHot = LightenC(g_themeBg, 0.14);
+        g_uiSurface = LightenC(g_themeBg, 0.10);
+        g_uiSurfaceBorder = LightenC(g_themeBg, 0.20);
+        g_uiSurfaceBorderHover = LightenC(g_themeBg, 0.32);
+        g_uiText = RGB(232, 232, 236);
+        g_uiTextDim = RGB(185, 185, 195);
+        g_uiTextFaint = RGB(145, 145, 158);
+        g_uiAccentText = RGB(120, 190, 255);
+        g_uiIcon = RGB(176, 176, 188);
+        g_uiSeparator = LightenC(g_themeBg, 0.10);
+        g_uiScrollTrack = LightenC(g_themeBg, 0.08);
+        g_uiScrollThumb = LightenC(g_themeBg, 0.28);
+        g_uiScrollThumbHot = LightenC(g_themeBg, 0.42);
+        g_uiDialogBg = LightenC(g_themeBg, 0.05);
+        g_uiNavSel = LightenC(g_themeBg, 0.12);
+        g_uiNavHover = LightenC(g_themeBg, 0.07);
+        g_uiBtn = LightenC(g_themeBg, 0.14);
+        g_uiBtnHot = LightenC(g_themeBg, 0.20);
+        g_uiSwitchOff = LightenC(g_themeBg, 0.20);
+    }
+
+    if (g_hbrEdit) DeleteObject(g_hbrEdit);
+    g_hbrEdit = CreateSolidBrush(g_uiSurface);
+}
+
+// 应用窗口整体不透明度（0~100，100 为不透明）
+static void ApplyWindowAlpha()
+{
+    if (!g_hWnd) return;
+    int a = g_winOpacity * 255 / 100;
+    if (a < 0) a = 0;
+    if (a > 255) a = 255;
+    SetLayeredWindowAttributes(g_hWnd, 0, (BYTE)a, LWA_ALPHA);
+}
+
+// 颜色 / 透明度改动后：重算背景色、应用透明度并重绘所有窗口
+static void ApplyThemeToMainWindow()
+{
+    UpdateThemeColor();
+    ApplyWindowAlpha();
+    if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+    if (g_hSearchEdit) InvalidateRect(g_hSearchEdit, nullptr, TRUE);
+    if (g_hSettings) InvalidateRect(g_hSettings, nullptr, FALSE);
+    if (g_hDlg) InvalidateRect(g_hDlg, nullptr, FALSE);
+    if (g_hMissingDlg) InvalidateRect(g_hMissingDlg, nullptr, FALSE);
+    if (g_hMenu) InvalidateRect(g_hMenu, nullptr, FALSE);
+}
+
+// ============================================================
+//  搜索框布局
+//    搜索框固定在右侧磁贴区域底部、左右居中，两端为半圆。
+//    左侧是圆形的齿轮设置按钮；磁贴区的可视高度需要扣掉底部搜索条占用的高度。
+// ============================================================
+static int SearchBoxH() { return S(SEARCH_H_BASE); }
+static int SearchBottomMargin() { return S(SEARCH_BOTTOM_BASE); }
+static int SearchStripH()
+{
+    return SearchBoxH() + SearchBottomMargin() + S(SEARCH_GAP_BASE);
+}
+
+static RECT GetSearchBoxRect()
+{
+    RECT rc; GetClientRect(g_hWnd, &rc);
+
+    int paneW = rc.right - LIST_W;
+    int boxH = SearchBoxH();
+    int boxW = S(SEARCH_W_BASE);
+
+    // 齿轮按钮 + 间隙 + 搜索框视为一个整体，整体在磁贴区内左右居中
+    const int gap = S(12);
+    int maxW = paneW - S(48) - boxH - gap;
+    if (boxW > maxW) boxW = maxW;
+    if (boxW < S(120)) boxW = S(120);
+
+    int groupW = boxH + gap + boxW;
+    int groupLeft = LIST_W + (paneW - groupW) / 2;
+    if (groupLeft < LIST_W + S(8)) groupLeft = LIST_W + S(8);
+
+    int left = groupLeft + boxH + gap;
+    int top = rc.bottom - SearchBottomMargin() - boxH;
+    RECT r = { left, top, left + boxW, top + boxH };
+    return r;
+}
+
+// 搜索框左侧的圆形齿轮设置按钮（直径与搜索框高度一致）
+static RECT GetSettingsButtonRect()
+{
+    RECT b = GetSearchBoxRect();
+    int d = b.bottom - b.top;
+    int cy = (b.top + b.bottom) / 2;
+    int x = b.left - S(12) - d;
+    RECT r = { x, cy - d / 2, x + d, cy - d / 2 + d };
+    return r;
+}
+
+static bool HitSettingsButton(POINT pt)
+{
+    RECT r = GetSettingsButtonRect();
+    return PtInRect(&r, pt) != FALSE;
+}
+
+// 右侧图标（放大镜 / 叉）的绘制矩形
+static RECT GetSearchIconRect()
+{
+    RECT b = GetSearchBoxRect();
+    int sz = S(SEARCH_ICON_BASE);
+    int cx = b.right - S(24);
+    int cy = (b.top + b.bottom) / 2;
+    RECT r = { cx - sz / 2, cy - sz / 2, cx - sz / 2 + sz, cy - sz / 2 + sz };
+    return r;
+}
+
+// 右侧图标（放大镜 / 叉）的可点击区域（搜索框右侧半圆内）
+static RECT GetSearchClearRect()
+{
+    RECT b = GetSearchBoxRect();
+    int h = b.bottom - b.top;
+    RECT r = { b.right - h, b.top, b.right, b.bottom };
+    return r;
+}
+
+static bool HitSearchBox(POINT pt)
+{
+    RECT b = GetSearchBoxRect();
+    return PtInRect(&b, pt) != FALSE;
+}
+
+// 只有已输入内容时，右侧图标才变成叉并可点击
+static bool HitSearchClear(POINT pt)
+{
+    if (g_searchText.empty()) return false;
+    RECT r = GetSearchClearRect();
+    return PtInRect(&r, pt) != FALSE;
+}
+
+// 根据光标位置刷新搜索框 / 叉的悬停状态。
+// 鼠标移到子窗口 EDIT 上时父窗口会收到 WM_MOUSELEAVE，
+// 这里用真实光标位置判断，避免边框在进入 / 离开时闪一下。
+static void RefreshSearchHover(POINT pt)
+{
+    bool hs = HitSearchBox(pt);
+    bool hc = HitSearchClear(pt);
+    if (hs == g_hoverSearch && hc == g_hoverSearchClear) return;
+
+    g_hoverSearch = hs;
+    g_hoverSearchClear = hc;
+    if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+}
+
+// 磁贴区可视区域的下边界（扣掉底部搜索框）
+static int TileViewBottom()
+{
+    RECT rc; GetClientRect(g_hWnd, &rc);
+    int b = rc.bottom - SearchStripH();
+    if (b < TITLE_H + S(40)) b = TITLE_H + S(40);
+    if (b > rc.bottom) b = rc.bottom;
+    return b;
+}
+
+static int TileViewH() { return TileViewBottom() - TITLE_H; }
+
+// ============================================================
+//  搜索匹配（不区分大小写；中文等字符按原样比较）
+// ============================================================
+static bool ItemMatchesSearch(int idx)
+{
+    if (g_searchText.empty()) return false;
+    if (idx < 0 || idx >= (int)g_items.size()) return false;
+
+    const std::wstring& name = g_items[idx].name;
+    if (g_searchText.size() > name.size()) return false;
+
+    for (size_t i = 0; i + g_searchText.size() <= name.size(); i++)
+    {
+        size_t j = 0;
+        for (; j < g_searchText.size(); j++)
+        {
+            if (towlower(name[i + j]) != towlower(g_searchText[j])) break;
+        }
+        if (j == g_searchText.size()) return true;
+    }
+    return false;
+}
+
+// 搜索命中高亮色（橙黄色）
+static const COLORREF SEARCH_HIT_BG = RGB(250, 176, 36);
+static const COLORREF SEARCH_HIT_BG_HOT = RGB(255, 199, 76);
+static const COLORREF SEARCH_HIT_TEXT = RGB(36, 26, 6);
+
+// ============================================================
 //  滚动条位置计算
 // ============================================================
 static bool GetListScrollBar(RECT& rcTrack, RECT& rcThumb)
@@ -685,12 +1086,12 @@ static bool GetListScrollBar(RECT& rcTrack, RECT& rcThumb)
 static bool GetTileScrollBar(RECT& rcTrack, RECT& rcThumb)
 {
     RECT rc; GetClientRect(g_hWnd, &rc);
-    int viewH = rc.bottom - TITLE_H;
+    int viewH = TileViewH();
     if (g_tileContentH <= viewH) return false;
 
     int trackX = rc.right - SCROLLBAR_W - S(4);
     int trackTop = TITLE_H + SCROLLBAR_PAD;
-    int trackBot = rc.bottom - SCROLLBAR_PAD;
+    int trackBot = TileViewBottom() - SCROLLBAR_PAD;
     if (trackBot - trackTop < SCROLLBAR_MIN_THUMB) return false;
 
     rcTrack = { trackX, trackTop, trackX + SCROLLBAR_W, trackBot };
@@ -893,7 +1294,7 @@ static void LayoutGroups()
     g_tileContentH = tempY + tempRowH + S(40);
 
     // 2. 修正滚动值
-    int viewH = rc.bottom - TITLE_H;
+    int viewH = TileViewH();
     int maxScroll = g_tileContentH - viewH;
     if (maxScroll < 0) maxScroll = 0;
     if (g_tileScroll > maxScroll) g_tileScroll = maxScroll;
@@ -1108,8 +1509,12 @@ static void LaunchItem(int idx)
         nullptr, SW_SHOWNORMAL);
     if ((INT_PTR)r <= 32)
     {
-        ShellExecuteW(nullptr, L"open", it.path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        r = ShellExecuteW(nullptr, L"open", it.path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
+
+    // 托盘模式：从程序内启动快捷方式后自动隐藏主窗口
+    if (g_trayMode && (INT_PTR)r > 32)
+        HideMainWindow();
 }
 
 static void OpenFileLocation(const std::wstring& path)
@@ -1127,7 +1532,7 @@ static void PaintTitleBar(HDC hdc)
     RECT rc; GetClientRect(g_hWnd, &rc);
     RECT rt = { 0, 0, rc.right, TITLE_H };
 
-    HBRUSH br = CreateSolidBrush(RGB(32, 32, 36));
+    HBRUSH br = CreateSolidBrush(g_uiTitle);
     FillRect(hdc, &rt, br);
     DeleteObject(br);
 
@@ -1140,7 +1545,7 @@ static void PaintTitleBar(HDC hdc)
 
     // 文字起点向后移动，留出图标宽度+8px的间隙
     RECT rtt = { S(44), 0, rc.right - BTN_W * 3 - S(10), TITLE_H };
-    DrawText2(hdc, L"开始菜单", rtt, RGB(232, 232, 232), g_fontTitle,
+    DrawText2(hdc, L"开始菜单", rtt, g_uiText, g_fontTitle,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     for (int b = 1; b <= 3; b++)
@@ -1148,7 +1553,7 @@ static void PaintTitleBar(HDC hdc)
         RECT rb = { rc.right - BTN_W * (4 - b), 0, rc.right - BTN_W * (3 - b), TITLE_H };
         if (g_hoverBtn == b)
         {
-            COLORREF c = (b == 3) ? RGB(196, 43, 28) : RGB(60, 60, 66);
+            COLORREF c = (b == 3) ? RGB(196, 43, 28) : g_uiTitleHot;
             HBRUSH hb = CreateSolidBrush(c);
             FillRect(hdc, &rb, hb);
             DeleteObject(hb);
@@ -1156,7 +1561,7 @@ static void PaintTitleBar(HDC hdc)
 
         int cx = (rb.left + rb.right) / 2;
         int cy = (rb.top + rb.bottom) / 2;
-        HPEN pn = CreatePen(PS_SOLID, 1, RGB(230, 230, 230));
+        HPEN pn = CreatePen(PS_SOLID, 1, g_uiText);
         HGDIOBJ op = SelectObject(hdc, pn);
         HGDIOBJ ob = SelectObject(hdc, GetStockObject(NULL_BRUSH));
 
@@ -1183,8 +1588,9 @@ static void PaintTitleBar(HDC hdc)
         }
         else
         {
-            MoveToEx(hdc, cx - S(5), cy - S(5), nullptr); LineTo(hdc, cx + S(5), cy + S(5));
-            MoveToEx(hdc, cx + S(5), cy - S(5), nullptr); LineTo(hdc, cx - S(5), cy + S(5));
+            // 补上终点像素，确保交叉点绝对居中
+            MoveToEx(hdc, cx - S(5), cy - S(5), nullptr); LineTo(hdc, cx + S(5) + 1, cy + S(5) + 1);
+            MoveToEx(hdc, cx + S(5), cy - S(5), nullptr); LineTo(hdc, cx - S(5) - 1, cy + S(5) + 1);
         }
 
         SelectObject(hdc, ob);
@@ -1192,7 +1598,7 @@ static void PaintTitleBar(HDC hdc)
         DeleteObject(pn);
     }
 
-    HPEN p = CreatePen(PS_SOLID, 1, RGB(48, 48, 54));
+    HPEN p = CreatePen(PS_SOLID, 1, g_uiSeparator);
     HGDIOBJ op = SelectObject(hdc, p);
     MoveToEx(hdc, 0, TITLE_H - 1, nullptr);
     LineTo(hdc, rc.right, TITLE_H - 1);
@@ -1205,7 +1611,7 @@ static void PaintList(HDC hdc)
     RECT rc; GetClientRect(g_hWnd, &rc);
     RECT rl = { 0, TITLE_H, LIST_W, rc.bottom };
 
-    HBRUSH br = CreateSolidBrush(RGB(28, 28, 31));
+    HBRUSH br = CreateSolidBrush(g_uiList);
     FillRect(hdc, &rl, br);
     DeleteObject(br);
 
@@ -1223,23 +1629,30 @@ static void PaintList(HDC hdc)
         if (r.header)
         {
             RECT rh = { LETTER_W + S(12), y, itemRight, y + LETTER_ROW_H };
-            DrawText2(hdc, std::wstring(1, r.letter), rh, RGB(140, 140, 150),
+            DrawText2(hdc, std::wstring(1, r.letter), rh, g_uiTextFaint,
                 g_fontSmall, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         }
         else
         {
             RECT ri = { LETTER_W + S(8), y, itemRight, y + ITEM_H };
             Item& it = g_items[r.itemIdx];
+            bool hit = ItemMatchesSearch(r.itemIdx);
 
-            // 文件缺失：背景变深红色
+            // 文件缺失：背景变深红色（优先于搜索高亮）
             if (it.missing)
             {
                 COLORREF col = (i == g_hoverListIdx) ? RGB(180, 50, 50) : RGB(145, 35, 35);
                 FillRoundRect(hdc, ri, S(4), col, col);
             }
+            else if (hit)
+            {
+                // 搜索命中：背景变为橙黄色
+                COLORREF col = (i == g_hoverListIdx) ? SEARCH_HIT_BG_HOT : SEARCH_HIT_BG;
+                FillRoundRect(hdc, ri, S(4), col, col);
+            }
             else if (i == g_hoverListIdx)
             {
-                FillRoundRect(hdc, ri, S(4), RGB(48, 48, 54), RGB(48, 48, 54));
+                FillRoundRect(hdc, ri, S(4), g_uiHover, g_uiHover);
             }
 
             if (it.hIcon)
@@ -1250,7 +1663,8 @@ static void PaintList(HDC hdc)
             }
 
             RECT rt = { ri.left + S(48), ri.top, ri.right - S(6), ri.bottom };
-            DrawText2(hdc, it.name, rt, RGB(220, 220, 225), g_fontUI,
+            COLORREF tcol = (hit && !it.missing) ? SEARCH_HIT_TEXT : g_uiText;
+            DrawText2(hdc, it.name, rt, tcol, g_fontUI,
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         }
     }
@@ -1259,7 +1673,7 @@ static void PaintList(HDC hdc)
     GetLetterRects(lr);
     for (int i = 0; i < (int)lr.size(); i++)
     {
-        COLORREF c = (i == g_hoverLetter) ? RGB(90, 160, 255) : RGB(150, 150, 160);
+        COLORREF c = (i == g_hoverLetter) ? RGB(90, 160, 255) : g_uiTextFaint;
         DrawText2(hdc, std::wstring(1, g_letters[i]), lr[i], c,
             g_fontSmall, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
@@ -1267,7 +1681,7 @@ static void PaintList(HDC hdc)
     SelectClipRgn(hdc, nullptr);
     DeleteObject(clip);
 
-    HPEN p = CreatePen(PS_SOLID, 1, RGB(45, 45, 50));
+    HPEN p = CreatePen(PS_SOLID, 1, g_uiSeparator);
     HGDIOBJ op = SelectObject(hdc, p);
     MoveToEx(hdc, LIST_W - 1, TITLE_H, nullptr);
     LineTo(hdc, LIST_W - 1, rc.bottom);
@@ -1279,20 +1693,21 @@ static void PaintTiles(HDC hdc)
 {
     RECT rc; GetClientRect(g_hWnd, &rc);
 
-    HRGN clip = CreateRectRgn(LIST_W, TITLE_H, rc.right, rc.bottom);
+    // 底部留给搜索框，磁贴不绘制到搜索框区域
+    HRGN clip = CreateRectRgn(LIST_W, TITLE_H, rc.right, TileViewBottom());
     SelectClipRgn(hdc, clip);
 
     for (int gi = 0; gi < (int)g_groups.size(); gi++)
     {
         Group& g = g_groups[gi];
 
-        FillRoundRect(hdc, g.rc, S(10), RGB(34, 34, 38), RGB(34, 34, 38));
+        FillRoundRect(hdc, g.rc, S(10), g_uiCard, g_uiCard);
 
         // 标题栏文字：上下左右居中
         RECT rt = { g.rc.left + GROUP_PAD, g.rcTitle.top,
             g.rc.right - GROUP_PAD, g.rcTitle.bottom + S(2) };
         DrawText2(hdc, g.name, rt,
-            RGB(190, 190, 200), g_fontSmall,
+            g_uiTextDim, g_fontSmall,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
         for (int ii = 0; ii < (int)g.items.size(); ii++)
@@ -1306,15 +1721,21 @@ static void PaintTiles(HDC hdc)
             Item& it = g_items[g.items[ii]];
 
             bool hot = (g_hoverTileG == gi && g_hoverTileI == ii);
+            bool hit = ItemMatchesSearch(g.items[ii]);
             COLORREF col;
-            // 文件缺失：背景变深红色
+            // 文件缺失：背景变深红色（优先于搜索高亮）
             if (it.missing)
             {
                 col = hot ? RGB(180, 50, 50) : RGB(145, 35, 35);
             }
+            else if (hit)
+            {
+                // 搜索命中：背景变为橙黄色
+                col = hot ? SEARCH_HIT_BG_HOT : SEARCH_HIT_BG;
+            }
             else
             {
-                col = hot ? RGB(60, 60, 68) : RGB(42, 42, 48);
+                col = hot ? g_uiTileHot : g_uiTile;
             }
             FillRoundRect(hdc, r, S(6), col, col);
 
@@ -1326,7 +1747,8 @@ static void PaintTiles(HDC hdc)
             }
 
             RECT rt2 = { r.left + S(4), r.bottom - S(24), r.right - S(4), r.bottom - S(4) };
-            DrawText2(hdc, it.name, rt2, RGB(255, 255, 255), g_fontSmall,
+            COLORREF tcol = (hit && !it.missing) ? SEARCH_HIT_TEXT : g_uiText;
+            DrawText2(hdc, it.name, rt2, tcol, g_fontSmall,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         }
     }
@@ -1416,12 +1838,257 @@ static void PaintTiles(HDC hdc)
 }
 
 // ============================================================
+//  搜索框绘制（两端半圆的胶囊形）
+// ============================================================
+// 点到线段的距离（用于绘制抗锯齿的放大镜手柄、叉的两条斜线）
+static double DistToSegment(double px, double py,
+    double ax, double ay, double bx, double by)
+{
+    double dx = bx - ax, dy = by - ay;
+    double len2 = dx * dx + dy * dy;
+    double t = 0.0;
+    if (len2 > 0.0) t = ((px - ax) * dx + (py - ay) * dy) / len2;
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double qx = ax + t * dx, qy = ay + t * dy;
+    double ddx = px - qx, ddy = py - qy;
+    return sqrt(ddx * ddx + ddy * ddy);
+}
+
+// 把到图形中心线的距离折算成覆盖率（0~1），让边缘平滑过渡
+static double ShapeCoverage(double dist, double halfWidth)
+{
+    double v = halfWidth + 0.5 - dist;
+    if (v <= 0.0) return 0.0;
+    if (v >= 1.0) return 1.0;
+    return v;
+}
+
+// 通用抗锯齿图标绘制：逐像素 4x4 超采样，按覆盖率与背景混色
+static void DrawAAIcon(HDC hdc, const RECT& rc, COLORREF fg, COLORREF bg,
+    const std::function<double(double, double)>& cover)
+{
+    const int SS = 4;
+    const double inv = 1.0 / (SS * SS);
+
+    for (int y = rc.top; y < rc.bottom; y++)
+    {
+        for (int x = rc.left; x < rc.right; x++)
+        {
+            double sum = 0.0;
+            for (int sy = 0; sy < SS; sy++)
+            {
+                for (int sx = 0; sx < SS; sx++)
+                {
+                    double px = x + (sx + 0.5) / SS;
+                    double py = y + (sy + 0.5) / SS;
+                    sum += cover(px, py);
+                }
+            }
+
+            double a = sum * inv;
+            if (a <= 0.002) continue;
+            if (a > 1.0) a = 1.0;
+
+            int r = (int)(GetRValue(bg) * (1.0 - a) + GetRValue(fg) * a + 0.5);
+            int g = (int)(GetGValue(bg) * (1.0 - a) + GetGValue(fg) * a + 0.5);
+            int b = (int)(GetBValue(bg) * (1.0 - a) + GetBValue(fg) * a + 0.5);
+            SetPixelV(hdc, x, y, RGB(r, g, b));
+        }
+    }
+}
+
+// 放大镜图标（抗锯齿）：圆环 + 右下方手柄
+static void DrawSearchIconAA(HDC hdc, const RECT& rc, COLORREF fg, COLORREF bg)
+{
+    double w = rc.right - rc.left;
+    double h = rc.bottom - rc.top;
+    if (w <= 2 || h <= 2) return;
+
+    double cx = rc.left + w * 0.42;
+    double cy = rc.top + h * 0.42;
+    double rad = w * 0.27;
+    double half = w * 0.055;          // 线宽的一半
+    if (half < 0.5) half = 0.5;
+
+    double hx0 = cx + rad * 0.70, hy0 = cy + rad * 0.70;
+    double hx1 = rc.right - w * 0.10, hy1 = rc.bottom - h * 0.10;
+
+    DrawAAIcon(hdc, rc, fg, bg, [=](double px, double py) -> double {
+        double ddx = px - cx, ddy = py - cy;
+        double dRing = fabs(sqrt(ddx * ddx + ddy * ddy) - rad);
+        double dSeg = DistToSegment(px, py, hx0, hy0, hx1, hy1);
+        double c1 = ShapeCoverage(dRing, half);
+        double c2 = ShapeCoverage(dSeg, half);
+        return c1 > c2 ? c1 : c2;
+    });
+}
+
+// 叉图标（抗锯齿）：两条对角线
+static void DrawClearIconAA(HDC hdc, const RECT& rc, COLORREF fg, COLORREF bg)
+{
+    double w = rc.right - rc.left;
+    double h = rc.bottom - rc.top;
+    if (w <= 2 || h <= 2) return;
+
+    double cx = rc.left + w / 2.0;
+    double cy = rc.top + h / 2.0;
+    double a = w * 0.26;
+    double half = w * 0.055;
+    if (half < 0.5) half = 0.5;
+
+    DrawAAIcon(hdc, rc, fg, bg, [=](double px, double py) -> double {
+        double d1 = DistToSegment(px, py, cx - a, cy - a, cx + a, cy + a);
+        double d2 = DistToSegment(px, py, cx + a, cy - a, cx - a, cy + a);
+        double c1 = ShapeCoverage(d1, half);
+        double c2 = ShapeCoverage(d2, half);
+        return c1 > c2 ? c1 : c2;
+    });
+}
+
+static inline double Clamp01(double v)
+{
+    if (v < 0.0) return 0.0;
+    if (v > 1.0) return 1.0;
+    return v;
+}
+
+// 齿轮图标（抗锯齿）：8 个圆角齿 + 中心圆孔
+static void DrawGearIconAA(HDC hdc, const RECT& rc, COLORREF fg, COLORREF bg)
+{
+    double w = rc.right - rc.left;
+    double h = rc.bottom - rc.top;
+    if (w <= 4.0 || h <= 4.0) return;
+
+    double cx = rc.left + w / 2.0;
+    double cy = rc.top + h / 2.0;
+    double rBase = w * 0.30;      // 齿根半径
+    double rTooth = w * 0.095;    // 齿高
+    double rHole = w * 0.115;     // 中心孔半径
+
+    DrawAAIcon(hdc, rc, fg, bg, [=](double px, double py) -> double {
+        double dx = px - cx, dy = py - cy;
+        double d = sqrt(dx * dx + dy * dy);
+        double ang = atan2(dy, dx);
+
+        // 用 cos 的平滑调制生成 8 个圆角齿
+        double t = (cos(ang * 8.0) + 1.0) * 0.5;
+        double tooth = t * t * t;
+        double rOut = rBase + rTooth * tooth;
+
+        double covOuter = Clamp01(rOut - d + 0.5);
+        double covHole = Clamp01(d - rHole + 0.5);
+        return covOuter * covHole;
+    });
+}
+
+// 抗锯齿胶囊形：左右两端为半圆，1px 边框也做抗锯齿。
+// 背景固定为窗口底色，直接在内存 DC 上按覆盖率混色。
+static void FillCapsuleAA(HDC hdc, const RECT& rc,
+    COLORREF fill, COLORREF border, COLORREF bg)
+{
+    double h = rc.bottom - rc.top;
+    if (h <= 2.0) return;
+
+    double rad = h / 2.0;
+    double cy = (rc.top + rc.bottom) / 2.0;
+    double ax = rc.left + rad;
+    double bx = rc.right - rad;
+    if (bx < ax) { ax = bx = (rc.left + rc.right) / 2.0; }
+
+    const double bw = 1.0;   // 边框宽度
+
+    for (int y = rc.top; y < rc.bottom; y++)
+    {
+        for (int x = rc.left; x < rc.right; x++)
+        {
+            double d = DistToSegment(x + 0.5, y + 0.5, ax, cy, bx, cy);
+
+            // 外形（含边框外沿）与内形（填充区域）的覆盖率
+            double outer = Clamp01(rad - d + 0.5);
+            if (outer <= 0.0) continue;
+            double inner = Clamp01((rad - bw) - d + 0.5);
+
+            double r = GetRValue(bg) * (1.0 - outer) + GetRValue(border) * outer;
+            double g = GetGValue(bg) * (1.0 - outer) + GetGValue(border) * outer;
+            double b = GetBValue(bg) * (1.0 - outer) + GetBValue(border) * outer;
+
+            r = r * (1.0 - inner) + GetRValue(fill) * inner;
+            g = g * (1.0 - inner) + GetGValue(fill) * inner;
+            b = b * (1.0 - inner) + GetBValue(fill) * inner;
+
+            SetPixelV(hdc, x, y, RGB((int)(r + 0.5), (int)(g + 0.5), (int)(b + 0.5)));
+        }
+    }
+}
+
+static void PaintSearchBox(HDC hdc)
+{
+    RECT rc; GetClientRect(g_hWnd, &rc);
+
+    HRGN clip = CreateRectRgn(LIST_W, TITLE_H, rc.right, rc.bottom);
+    SelectClipRgn(hdc, clip);
+
+    RECT box = GetSearchBoxRect();
+    const COLORREF fill = g_uiSurface;
+
+    bool focused = (g_hSearchEdit != nullptr && GetFocus() == g_hSearchEdit);
+    COLORREF border;
+    if (focused) border = RGB(0, 174, 255);
+    else if (g_hoverSearch) border = g_uiSurfaceBorderHover;
+    else border = g_uiSurfaceBorder;
+
+    // 胶囊形底：左右两端为半圆。
+    // 用逐像素覆盖率做抗锯齿（GDI 的 RoundRect 两端是硬锯齿）
+    FillCapsuleAA(hdc, box, fill, border, g_themeBg);
+
+    // 右侧图标：无内容时为放大镜；输入内容后自动变成叉
+    RECT ir = GetSearchIconRect();
+    if (g_searchText.empty())
+    {
+        COLORREF ic = g_hoverSearch ? g_uiText : g_uiIcon;
+        DrawSearchIconAA(hdc, ir, ic, fill);
+    }
+    else
+    {
+        COLORREF ic;
+        if (g_hoverSearchClear) ic = RGB(255, 108, 88);
+        else if (g_hoverSearch) ic = g_uiText;
+        else ic = g_uiIcon;
+        DrawClearIconAA(hdc, ir, ic, fill);
+    }
+
+    SelectClipRgn(hdc, nullptr);
+    DeleteObject(clip);
+}
+
+// 搜索框左侧的圆形齿轮按钮（圆形 + 齿轮均抗锯齿）
+static void PaintSettingsButton(HDC hdc)
+{
+    RECT r = GetSettingsButtonRect();
+    int d = r.right - r.left;
+    int isz = S(GEAR_ICON_BASE);
+
+    const COLORREF bg = g_themeBg;
+    const COLORREF fill = g_uiSurface;
+    COLORREF border = g_hoverSettingsBtn ? g_uiSurfaceBorderHover : g_uiSurfaceBorder;
+
+    // 与搜索框完全相同的填充与边框，只是形状为圆形
+    FillCapsuleAA(hdc, r, fill, border, bg);
+
+    RECT ir = { r.left + (d - isz) / 2, r.top + (d - isz) / 2,
+                r.left + (d - isz) / 2 + isz, r.top + (d - isz) / 2 + isz };
+    COLORREF ic = g_hoverSettingsBtn ? g_uiText : g_uiIcon;
+    DrawGearIconAA(hdc, ir, ic, fill);
+}
+
+// ============================================================
 //  绘制滚动条
 // ============================================================
 static void PaintOneScrollBar(HDC hdc, const RECT& rcTrack, const RECT& rcThumb, bool dragging)
 {
-    FillRoundRect(hdc, rcTrack, SCROLLBAR_W, RGB(42, 42, 48), RGB(42, 42, 48));
-    COLORREF tc = dragging ? RGB(140, 140, 155) : RGB(90, 90, 100);
+    FillRoundRect(hdc, rcTrack, SCROLLBAR_W, g_uiScrollTrack, g_uiScrollTrack);
+    COLORREF tc = dragging ? g_uiScrollThumbHot : g_uiScrollThumb;
     FillRoundRect(hdc, rcThumb, SCROLLBAR_W, tc, tc);
 }
 
@@ -1441,7 +2108,7 @@ static void PaintScrollBars(HDC hdc)
 static void PaintDragGhost(HDC hdc)
 {
     RECT r = g_dragRect;
-    FillRoundRect(hdc, r, S(6), RGB(70, 70, 80), RGB(120, 120, 140));
+    FillRoundRect(hdc, r, S(6), g_uiBtnHot, g_uiSurfaceBorderHover);
 
     if (g_dragG >= 0 && g_dragG < (int)g_groups.size() &&
         g_dragI >= 0 && g_dragI < (int)g_groups[g_dragG].items.size())
@@ -1456,7 +2123,7 @@ static void PaintDragGhost(HDC hdc)
                     it.hIcon, sz, sz, 0, nullptr, DI_NORMAL);
             }
             RECT rt = { r.left + S(4), r.bottom - S(24), r.right - S(4), r.bottom - S(4) };
-            DrawText2(hdc, it.name, rt, RGB(255, 255, 255), g_fontSmall,
+            DrawText2(hdc, it.name, rt, g_uiText, g_fontSmall,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         }
     }
@@ -1466,7 +2133,7 @@ static void Paint(HDC hdc)
 {
     RECT rc; GetClientRect(g_hWnd, &rc);
 
-    HBRUSH bg = CreateSolidBrush(RGB(22, 22, 25));
+    HBRUSH bg = CreateSolidBrush(g_themeBg);
     FillRect(hdc, &rc, bg);
     DeleteObject(bg);
 
@@ -1474,6 +2141,8 @@ static void Paint(HDC hdc)
     PaintList(hdc);
     PaintTiles(hdc);
     PaintScrollBars(hdc);
+    PaintSearchBox(hdc);
+    PaintSettingsButton(hdc);
 
     if (g_dragTile) PaintDragGhost(hdc);
 
@@ -1482,7 +2151,7 @@ static void Paint(HDC hdc)
     // ========================================================
     if (!IsZoomed(g_hWnd))
     {
-        HBRUSH br = CreateSolidBrush(RGB(48, 48, 54));
+        HBRUSH br = CreateSolidBrush(g_uiSeparator);
         FrameRect(hdc, &rc, br);
         DeleteObject(br);
     }
@@ -1523,17 +2192,17 @@ static LRESULT CALLBACK MenuProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc; GetClientRect(hwnd, &rc);
 
-        FillRoundRect(hdc, rc, S(8), RGB(32, 32, 36), RGB(70, 70, 78));
+        FillRoundRect(hdc, rc, S(8), g_uiCard, g_uiSurfaceBorder);
 
         for (int i = 0; i < (int)g_menuItems.size(); i++)
         {
             RECT ri = { MENU_PAD, MENU_PAD + i * MENU_ITEM_H,
                         rc.right - MENU_PAD, MENU_PAD + (i + 1) * MENU_ITEM_H };
             if (i == g_menuHover)
-                FillRoundRect(hdc, ri, S(4), RGB(60, 60, 68), RGB(60, 60, 68));
+                FillRoundRect(hdc, ri, S(4), g_uiHover, g_uiHover);
 
             RECT rt = { ri.left + S(12), ri.top, ri.right - S(8), ri.bottom };
-            DrawText2(hdc, g_menuItems[i], rt, RGB(225, 225, 230), g_fontUI,
+            DrawText2(hdc, g_menuItems[i], rt, g_uiText, g_fontUI,
                 DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         }
         EndPaint(hwnd, &ps);
@@ -1586,12 +2255,34 @@ static LRESULT CALLBACK MenuProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
             int target = g_menuTargetItem;
             int action = idx;
+            int mode = g_menuMode;
 
             if (g_hMenu == hwnd) g_hMenu = nullptr;
             ShowWindow(hwnd, SW_HIDE);
             if (IsWindow(hwnd)) DestroyWindow(hwnd);
 
-            DoMenuAction(target, action);
+            if (mode == 1)
+            {
+                // 托盘菜单：打开窗口 / 退出托盘模式 / 退出
+                if (action == 0)
+                {
+                    ShowMainWindow();
+                }
+                else if (action == 1)
+                {
+                    ApplyTrayMode(false);
+                    SaveConfig();
+                    ShowMainWindow();
+                }
+                else if (action == 2)
+                {
+                    ExitApplication();
+                }
+            }
+            else
+            {
+                DoMenuAction(target, action);
+            }
         }
         else
         {
@@ -1609,6 +2300,7 @@ static LRESULT CALLBACK MenuProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (g_hMenu == hwnd) g_hMenu = nullptr;
         g_menuPressedIdx = -1;
         g_menuTargetItem = -1;   // 清理残留
+        g_menuMode = 0;
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -1621,6 +2313,7 @@ static void ShowContextMenu(POINT ptClient)
     g_menuItems = { L"重命名", L"打开文件位置", L"移除快捷方式" };
     g_menuHover = -1;
     g_menuPressedIdx = -1;
+    g_menuMode = 0;
 
     POINT pt = ptClient;
     ClientToScreen(g_hWnd, &pt);
@@ -1640,6 +2333,305 @@ static void ShowContextMenu(POINT ptClient)
     }
 }
 
+// 托盘图标菜单：打开窗口 / 退出（左键、右键点击托盘图标都弹出这个菜单）
+static void ShowTrayMenu(POINT ptScreen)
+{
+    if (g_hMenu) { DestroyWindow(g_hMenu); g_hMenu = nullptr; }
+
+    g_menuItems = { L"打开窗口", L"退出托盘模式", L"退出" };
+    g_menuHover = -1;
+    g_menuPressedIdx = -1;
+    g_menuTargetItem = -1;
+    g_menuMode = 1;
+
+    int w = MENU_W;
+    int h = MENU_PAD * 2 + MENU_ITEM_H * (int)g_menuItems.size();
+
+    // 保证菜单完整显示在屏幕工作区内
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfoW(MonitorFromPoint(ptScreen, MONITOR_DEFAULTTONEAREST), &mi);
+    int x = ptScreen.x, y = ptScreen.y;
+    if (x + w > mi.rcWork.right) x = mi.rcWork.right - w;
+    if (y + h > mi.rcWork.bottom) y = mi.rcWork.bottom - h;
+    if (x < mi.rcWork.left) x = mi.rcWork.left;
+    if (y < mi.rcWork.top) y = mi.rcWork.top;
+
+    g_hMenu = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        L"SMRightMenu", L"", WS_POPUP,
+        x, y, w, h, g_hWnd, nullptr, g_hInst, nullptr);
+
+    if (g_hMenu)
+    {
+        ShowWindow(g_hMenu, SW_SHOW);
+        SetForegroundWindow(g_hMenu);
+        SetCapture(g_hMenu);
+    }
+}
+
+// ============================================================
+//  统一激活并前置主窗口
+//  弹窗关闭后调用，确保主窗口不会被其它程序的窗口挡住
+// ============================================================
+static void ActivateMainWindow()
+{
+    if (!g_hWnd) return;
+
+    EnableWindow(g_hWnd, TRUE);
+
+    if (IsIconic(g_hWnd))
+        ShowWindow(g_hWnd, SW_RESTORE);
+
+    // 先尝试普通激活
+    SetForegroundWindow(g_hWnd);
+    BringWindowToTop(g_hWnd);
+
+    // 如果主窗口仍未获得焦点（可能被其它进程的前台窗口抢占），
+    // 则使用 AttachThreadInput 短暂附加到前台线程进行强制激活
+    if (GetForegroundWindow() != g_hWnd)
+    {
+        DWORD fgThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+        DWORD myThread = GetCurrentThreadId();
+        if (fgThread && fgThread != myThread)
+        {
+            AttachThreadInput(myThread, fgThread, TRUE);
+            SetForegroundWindow(g_hWnd);
+            BringWindowToTop(g_hWnd);
+            AttachThreadInput(myThread, fgThread, FALSE);
+        }
+    }
+
+    // 确保主窗口在 Z 序顶部
+    SetWindowPos(g_hWnd, HWND_TOP, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+    // 标记重绘（不强制立即刷新，避免闪烁）
+    InvalidateRect(g_hWnd, nullptr, FALSE);
+}
+
+// ============================================================
+//  托盘模式
+// ============================================================
+static void ShowMainWindow()
+{
+    if (!g_hWnd) return;
+
+    if (IsIconic(g_hWnd)) ShowWindow(g_hWnd, SW_RESTORE);
+    else ShowWindow(g_hWnd, SW_SHOW);
+
+    // 托盘模式下的显示通常由全局热键 / 托盘菜单触发，
+    // 进程此时不是前台进程，SetForegroundWindow 可能失败。
+    // 若不强制激活窗口，它就一直是“未激活”状态，
+    // 此时点击窗口外不会产生 WM_ACTIVATE(WA_INACTIVE)，也就不会自动隐藏。
+    SetForegroundWindow(g_hWnd);
+    BringWindowToTop(g_hWnd);
+
+    if (GetForegroundWindow() != g_hWnd)
+    {
+        DWORD fgThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+        DWORD myThread = GetCurrentThreadId();
+        if (fgThread && fgThread != myThread)
+        {
+            AttachThreadInput(myThread, fgThread, TRUE);
+            SetForegroundWindow(g_hWnd);
+            BringWindowToTop(g_hWnd);
+            AttachThreadInput(myThread, fgThread, FALSE);
+        }
+    }
+
+    SetWindowPos(g_hWnd, HWND_TOP, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE);
+
+    // 已经主动激活过，允许“点击窗口外自动隐藏”
+    g_mainWasActive = true;
+    InvalidateRect(g_hWnd, nullptr, FALSE);
+}
+
+static void HideMainWindow()
+{
+    if (!g_hWnd) return;
+    if (g_hMenu) { DestroyWindow(g_hMenu); g_hMenu = nullptr; }
+    ShowWindow(g_hWnd, SW_HIDE);
+    g_mainWasActive = false;
+}
+
+static void ToggleMainWindow()
+{
+    if (!g_hWnd) return;
+    if (IsWindowVisible(g_hWnd)) HideMainWindow();
+    else ShowMainWindow();
+}
+
+static void ExitApplication()
+{
+    if (!g_hWnd) return;
+    g_reallyExit = true;
+    SaveConfig();
+    DestroyWindow(g_hWnd);
+}
+
+static void AddTrayIcon()
+{
+    if (!g_hWnd || g_trayIconAdded) return;
+
+    NOTIFYICONDATAW nid = { 0 };
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_hWnd;
+    nid.uID = 1;
+    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid.uCallbackMessage = WM_TRAYICON;
+    nid.hIcon = g_hIconSmall ? g_hIconSmall : LoadIconW(nullptr, IDI_APPLICATION);
+    lstrcpynW(nid.szTip, L"开始菜单",
+        (int)(sizeof(nid.szTip) / sizeof(nid.szTip[0])));
+
+    if (Shell_NotifyIconW(NIM_ADD, &nid))
+        g_trayIconAdded = true;
+}
+
+static void RemoveTrayIcon()
+{
+    if (!g_hWnd || !g_trayIconAdded) return;
+
+    NOTIFYICONDATAW nid = { 0 };
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = g_hWnd;
+    nid.uID = 1;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    g_trayIconAdded = false;
+}
+
+// 低层键盘钩子：检测 Ctrl + Win 组合键（两者都按下并在没有其它键时松开）
+static LRESULT CALLBACK TrayKeyboardProc(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HC_ACTION)
+    {
+        KBDLLHOOKSTRUCT* k = (KBDLLHOOKSTRUCT*)lp;
+        DWORD vk = k->vkCode;
+        bool isDown = (wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN);
+        bool isUp = (wp == WM_KEYUP || wp == WM_SYSKEYUP);
+        bool isCtrl = (vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_CONTROL);
+        bool isWin = (vk == VK_LWIN || vk == VK_RWIN);
+
+        // 每次事件前用真实按键状态校准，避免漏掉某个 keyup 后状态卡死
+        if (!(GetAsyncKeyState(VK_CONTROL) & 0x8000)) g_kbCtrlDown = false;
+        if (!(GetAsyncKeyState(VK_LWIN) & 0x8000) &&
+            !(GetAsyncKeyState(VK_RWIN) & 0x8000)) g_kbWinDown = false;
+
+        if (isDown)
+        {
+            // 新一次组合键从干净的状态开始
+            if ((isCtrl && !g_kbWinDown) || (isWin && !g_kbCtrlDown))
+            {
+                g_kbChordOther = false;
+                g_kbChordDone = false;
+            }
+
+            if (isCtrl) g_kbCtrlDown = true;
+            else if (isWin) g_kbWinDown = true;
+            else if (g_kbCtrlDown || g_kbWinDown) g_kbChordOther = true;
+        }
+        else if (isUp && (isCtrl || isWin))
+        {
+            bool wasChord = g_kbCtrlDown && g_kbWinDown;
+            if (isCtrl) g_kbCtrlDown = false;
+            if (isWin) g_kbWinDown = false;
+
+            if (wasChord && !g_kbChordOther && !g_kbChordDone && g_trayMode)
+            {
+                g_kbChordDone = true;
+                if (g_hWnd) PostMessageW(g_hWnd, WM_TOGGLE_MAIN, 0, 0);
+            }
+
+            if (!g_kbCtrlDown && !g_kbWinDown)
+            {
+                g_kbChordOther = false;
+                g_kbChordDone = false;
+            }
+        }
+    }
+    return CallNextHookEx(g_kbHook, code, wp, lp);
+}
+
+static DWORD  g_hookThreadId = 0;
+static HANDLE g_hookThread = nullptr;
+
+static DWORD WINAPI TrayHotkeyThreadProc(LPVOID)
+{
+    // 先创建消息队列，再安装钩子
+    MSG msg;
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+
+    g_kbHook = SetWindowsHookExW(WH_KEYBOARD_LL, TrayKeyboardProc, nullptr, 0);
+
+    while (GetMessageW(&msg, nullptr, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (g_kbHook)
+    {
+        UnhookWindowsHookEx(g_kbHook);
+        g_kbHook = nullptr;
+    }
+    return 0;
+}
+
+static void InstallTrayHotkey()
+{
+    if (g_hookThread) return;
+
+    g_kbCtrlDown = g_kbWinDown = false;
+    g_kbChordOther = g_kbChordDone = false;
+
+    g_hookThread = CreateThread(nullptr, 0, TrayHotkeyThreadProc, nullptr, 0,
+        &g_hookThreadId);
+    if (g_hookThread) Sleep(20);
+}
+
+static void UninstallTrayHotkey()
+{
+    if (!g_hookThread) return;
+
+    PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_hookThread, 1000);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+    g_hookThreadId = 0;
+}
+
+// 开启 / 关闭托盘模式：任务栏按钮、托盘图标、Ctrl+Win 热键、窗口扩展样式
+static void ApplyTrayMode(bool enable)
+{
+    g_trayMode = enable;
+    if (!g_hWnd) return;
+
+    LONG_PTR ex = GetWindowLongPtrW(g_hWnd, GWL_EXSTYLE);
+    if (enable)
+    {
+        ex &= ~WS_EX_APPWINDOW;
+        ex |= WS_EX_TOOLWINDOW;
+    }
+    else
+    {
+        ex &= ~WS_EX_TOOLWINDOW;
+        ex |= WS_EX_APPWINDOW;
+    }
+    SetWindowLongPtrW(g_hWnd, GWL_EXSTYLE, ex);
+    SetWindowPos(g_hWnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+    if (enable)
+    {
+        AddTrayIcon();
+        InstallTrayHotkey();
+    }
+    else
+    {
+        RemoveTrayIcon();
+        UninstallTrayHotkey();
+    }
+}
+
 // ============================================================
 //  对话框公共辅助（合并 Rename / Missing 的重复逻辑）
 // ============================================================
@@ -1650,7 +2642,7 @@ static void PaintDialogTitle(HDC hdc, HWND hwnd, const wchar_t* title, bool hove
     RECT rc; GetClientRect(hwnd, &rc);
 
     RECT rtt = { S(16), 0, rc.right - S(40), DLG_TITLE_H };
-    DrawText2(hdc, title, rtt, RGB(232, 232, 232), g_fontTitle,
+    DrawText2(hdc, title, rtt, g_uiText, g_fontTitle,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     RECT rcClose = { rc.right - DLG_TITLE_H, 0, rc.right, DLG_TITLE_H };
@@ -1663,16 +2655,17 @@ static void PaintDialogTitle(HDC hdc, HWND hwnd, const wchar_t* title, bool hove
     int cx = (rcClose.left + rcClose.right) / 2;
     int cy = (rcClose.top + rcClose.bottom) / 2;
     {
-        HPEN pn = CreatePen(PS_SOLID, 1, RGB(220, 220, 220));
+        HPEN pn = CreatePen(PS_SOLID, 1, g_uiText);
         HGDIOBJ op = SelectObject(hdc, pn);
-        MoveToEx(hdc, cx - S(4), cy - S(4), nullptr); LineTo(hdc, cx + S(4), cy + S(4));
-        MoveToEx(hdc, cx + S(4), cy - S(4), nullptr); LineTo(hdc, cx - S(4), cy + S(4));
+        // 补上终点像素，确保交叉点绝对居中
+        MoveToEx(hdc, cx - S(4), cy - S(4), nullptr); LineTo(hdc, cx + S(4) + 1, cy + S(4) + 1);
+        MoveToEx(hdc, cx + S(4), cy - S(4), nullptr); LineTo(hdc, cx - S(4) - 1, cy + S(4) + 1);
         SelectObject(hdc, op);
         DeleteObject(pn);
     }
 
     {
-        HPEN pl = CreatePen(PS_SOLID, 1, RGB(50, 50, 56));
+        HPEN pl = CreatePen(PS_SOLID, 1, g_uiSeparator);
         HGDIOBJ op = SelectObject(hdc, pl);
         MoveToEx(hdc, 1, DLG_TITLE_H, nullptr);
         LineTo(hdc, rc.right - 1, DLG_TITLE_H);
@@ -1702,6 +2695,9 @@ static void RunModalLoop(HWND& modalWnd)
         modalWnd = nullptr;
         if (IsWindow(h)) DestroyWindow(h);
     }
+
+    // 弹窗已彻底销毁，确保主窗口回到前台
+    ActivateMainWindow();
 }
 
 // ============================================================
@@ -1722,7 +2718,7 @@ static void PaintRenameDlg(HDC hdc, HWND hwnd)
 {
     RECT rc; GetClientRect(hwnd, &rc);
 
-    HBRUSH bg = CreateSolidBrush(RGB(34, 34, 38));
+    HBRUSH bg = CreateSolidBrush(g_uiDialogBg);
     FillRect(hdc, &rc, bg);
     DeleteObject(bg);
 
@@ -1730,7 +2726,7 @@ static void PaintRenameDlg(HDC hdc, HWND hwnd)
 
     {
         bool focused = (GetFocus() == g_hDlgEdit) || (GetFocus() == hwnd);
-        COLORREF bcol = focused ? RGB(0, 174, 255) : RGB(70, 70, 78);
+        COLORREF bcol = focused ? RGB(0, 174, 255) : g_uiSurfaceBorder;
         HPEN pn = CreatePen(PS_SOLID, 1, bcol);
         HGDIOBJ op = SelectObject(hdc, pn);
         HGDIOBJ ob = SelectObject(hdc, GetStockObject(NULL_BRUSH));
@@ -1743,9 +2739,9 @@ static void PaintRenameDlg(HDC hdc, HWND hwnd)
 
     {
         bool hot = (g_dlgHoverBtn == 1);
-        COLORREF fill = hot ? RGB(70, 70, 80) : RGB(55, 55, 62);
+        COLORREF fill = hot ? g_uiBtnHot : g_uiBtn;
         FillRoundRect(hdc, g_dlgBtnCancel, S(4), fill, fill);
-        DrawText2(hdc, L"取消", g_dlgBtnCancel, RGB(225, 225, 230), g_fontUI,
+        DrawText2(hdc, L"取消", g_dlgBtnCancel, g_uiText, g_fontUI,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
@@ -1902,25 +2898,17 @@ static LRESULT CALLBACK RenameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CTLCOLOREDIT:
     {
         HDC hdc = (HDC)wp;
-        SetTextColor(hdc, RGB(230, 230, 235));
-        SetBkColor(hdc, RGB(45, 45, 52));
-        static HBRUSH hbr = CreateSolidBrush(RGB(45, 45, 52));
-        return (LRESULT)hbr;
+        SetTextColor(hdc, g_uiText);
+        SetBkColor(hdc, g_uiSurface);
+        return (LRESULT)g_hbrEdit;
     }
     case WM_DESTROY:
         g_hDlg = nullptr;
         g_hDlgEdit = nullptr;
         g_dlgHoverBtn = -1;
         g_dlgPressedBtn = -1;
-        g_dlgItem = -1;          // 清理残留
-        if (g_hWnd)
-        {
-            EnableWindow(g_hWnd, TRUE);
-            SetForegroundWindow(g_hWnd);
-            // 强制重绘主窗口，修复分层窗口在弹窗期间导致的背景透明问题
-            RedrawWindow(g_hWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_ERASE);
-            InvalidateRect(g_hWnd, nullptr, FALSE);
-        }
+        g_dlgItem = -1;
+        ActivateMainWindow();
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -1981,6 +2969,610 @@ static void ShowRenameDialog(int itemIdx)
 }
 
 // ============================================================
+//  设置窗口（自绘，风格与重命名对话框一致）
+//    左侧：选项列表（窗口模式 / 主题调节）
+//    右侧：对应内容
+// ============================================================
+static int SetNavW() { return S(SET_NAV_W_BASE); }
+
+static RECT SettingsNavItemRect(HWND hwnd, int i)
+{
+    RECT rc; GetClientRect(hwnd, &rc);
+    int x = S(16);
+    int y = DLG_TITLE_H + S(18) + i * (S(SET_NAV_ITEM_H_BASE) + S(6));
+    RECT r = { x, y, x + SetNavW(), y + S(SET_NAV_ITEM_H_BASE) };
+    return r;
+}
+
+static RECT SettingsContentRect(HWND hwnd)
+{
+    RECT rc; GetClientRect(hwnd, &rc);
+    RECT r = { S(16) + SetNavW() + S(22), DLG_TITLE_H + S(20),
+               rc.right - S(22), rc.bottom - S(18) };
+    return r;
+}
+
+static RECT SettingsSwitchRect(HWND hwnd)
+{
+    RECT c = SettingsContentRect(hwnd);
+    int w = S(SET_SWITCH_W_BASE), h = S(SET_SWITCH_H_BASE);
+    int top = c.top + S(62);
+    RECT r = { c.right - w, top, c.right, top + h };
+    return r;
+}
+
+// 三个滑条：0=透明度 1=颜色 2=亮度
+// 0 号与 1 号之间留出“黑白”开关的位置
+static void SettingsSliderRects(HWND hwnd, RECT out[3])
+{
+    RECT c = SettingsContentRect(hwnd);
+    int y = c.top + S(44);
+    for (int k = 0; k < 3; k++)
+    {
+        out[k].left = c.left + S(2);
+        out[k].right = c.right - S(2);
+        out[k].top = y + S(26);
+        out[k].bottom = out[k].top + S(SET_TRACK_H_BASE);
+        y = out[k].bottom + (k == 0 ? S(56) : S(34));
+    }
+}
+
+// “主题颜色”上方的黑白开关
+static RECT SettingsGraySwitchRect(HWND hwnd)
+{
+    RECT c = SettingsContentRect(hwnd);
+    RECT tracks[3];
+    SettingsSliderRects(hwnd, tracks);
+
+    int w = S(38), h = S(20);
+    int top = tracks[0].bottom + S(26);
+    RECT r = { c.right - w, top, c.right, top + h };
+    return r;
+}
+
+// 主题页右下角的“恢复默认”按钮
+static RECT SettingsResetRect(HWND hwnd)
+{
+    RECT c = SettingsContentRect(hwnd);
+    int w = S(96), h = S(30);
+    RECT r = { c.right - w, c.bottom - h, c.right, c.bottom };
+    return r;
+}
+
+static int SettingsSliderValue(int k)
+{
+    if (k == 0) return g_winOpacity;
+    if (k == 1) return g_grayMode ? g_grayLevel : g_themeHue;
+    return g_themeBright;
+}
+
+static int SettingsSliderMax(int k)
+{
+    return (k == 1 && !g_grayMode) ? 360 : 100;
+}
+
+// 滑条某个位置的颜色
+static COLORREF SettingsSliderColorAt(int k, double t)
+{
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+
+    if (k == 0)
+    {
+        // 已填充部分为蓝色，未填充部分为灰色
+        double v = g_winOpacity / 100.0;
+        return (t <= v) ? RGB(0, 150, 230) : g_uiSwitchOff;
+    }
+    if (k == 1)
+    {
+        if (g_grayMode)
+        {
+            int v = (int)(t * 255.0 + 0.5);
+            return RGB(v, v, v);
+        }
+        int r, g, b;
+        HSVToRGB(t * 360.0, 0.85, 1.0, r, g, b);
+        return RGB(r, g, b);
+    }
+
+    int v = (int)(t * 255.0 + 0.5);
+    return RGB(v, v, v);
+}
+
+// 抗锯齿地绘制一根滑条
+static void DrawSettingsTrack(HDC hdc, const RECT& rc, int k)
+{
+    double h = rc.bottom - rc.top;
+    if (h <= 2.0) return;
+
+    double rad = h / 2.0;
+    double cy = (rc.top + rc.bottom) / 2.0;
+    double ax = rc.left + rad;
+    double bx = rc.right - rad;
+    if (bx < ax) { ax = bx = (rc.left + rc.right) / 2.0; }
+
+    const COLORREF bg = g_uiDialogBg;
+    double span = (double)(rc.right - rc.left);
+
+    for (int y = rc.top; y < rc.bottom; y++)
+    {
+        for (int x = rc.left; x < rc.right; x++)
+        {
+            double d = DistToSegment(x + 0.5, y + 0.5, ax, cy, bx, cy);
+            double cov = Clamp01(rad - d + 0.5);
+            if (cov <= 0.0) continue;
+
+            double t = (x + 0.5 - rc.left) / span;
+            COLORREF c = SettingsSliderColorAt(k, t);
+
+            int r = (int)(GetRValue(bg) * (1.0 - cov) + GetRValue(c) * cov + 0.5);
+            int g = (int)(GetGValue(bg) * (1.0 - cov) + GetGValue(c) * cov + 0.5);
+            int b = (int)(GetBValue(bg) * (1.0 - cov) + GetBValue(c) * cov + 0.5);
+            SetPixelV(hdc, x, y, RGB(r, g, b));
+        }
+    }
+}
+
+static void DrawSettingsKnob(HDC hdc, const RECT& track, int k)
+{
+    int maxv = SettingsSliderMax(k);
+    double t = maxv > 0 ? (double)SettingsSliderValue(k) / maxv : 0.0;
+    int rad = S(SET_KNOB_R_BASE);
+    int span = (track.right - track.left) - rad * 2;
+    int cx = track.left + rad + (int)(span * t + 0.5);
+    int cy = (track.top + track.bottom) / 2;
+
+    RECT kr = { cx - rad, cy - rad, cx + rad, cy + rad };
+    COLORREF under = SettingsSliderColorAt(k, t);
+    FillCapsuleAA(hdc, kr, RGB(250, 250, 252), g_uiSurfaceBorder, under);
+}
+
+static void PaintToggle(HDC hdc, const RECT& sw, bool on, bool hover)
+{
+    COLORREF track = on ? RGB(0, 150, 230) : g_uiSwitchOff;
+    if (hover)
+        track = on ? RGB(0, 168, 250) : g_uiScrollThumb;
+
+    FillCapsuleAA(hdc, sw, track, track, g_uiDialogBg);
+
+    int d = (sw.bottom - sw.top) - S(4);
+    int cy = (sw.top + sw.bottom) / 2;
+    int cx = on ? (sw.right - S(2) - d / 2) : (sw.left + S(2) + d / 2);
+    RECT kr = { cx - d / 2, cy - d / 2, cx - d / 2 + d, cy - d / 2 + d };
+    FillCapsuleAA(hdc, kr, RGB(250, 250, 255), g_uiSurfaceBorder, track);
+}
+
+static void PaintSettingsSwitch(HDC hdc, HWND hwnd)
+{
+    PaintToggle(hdc, SettingsSwitchRect(hwnd), g_trayMode, g_setHover == 3);
+}
+
+static void PaintSettingsTrayPage(HDC hdc, HWND hwnd)
+{
+    RECT c = SettingsContentRect(hwnd);
+
+    RECT rt = { c.left, c.top, c.right, c.top + S(28) };
+    DrawText2(hdc, L"窗口模式", rt, g_uiText, g_fontTitle,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    RECT rd = { c.left, c.top + S(32), c.right, c.top + S(54) };
+    DrawText2(hdc, L"隐藏任务栏图标，改用通知区域图标运行。", rd,
+        g_uiTextFaint, g_fontSmall,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    RECT rs = { c.left, c.top + S(62), c.right - S(SET_SWITCH_W_BASE) - S(12),
+                c.top + S(62) + S(SET_SWITCH_H_BASE) };
+    DrawText2(hdc, L"切换到托盘模式", rs, g_uiText, g_fontUI,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    PaintSettingsSwitch(hdc, hwnd);
+
+    const wchar_t* lines[] = {
+        L"开启后：",
+        L"· 隐藏任务栏图标，通知区域显示程序图标",
+        L"· 左键或右键点击托盘图标：打开窗口 / 退出托盘模式 / 退出",
+        L"· 按 Ctrl + Win 键显示或隐藏主窗口",
+        L"· 点击最小化、关闭按钮只隐藏窗口",
+        L"· 启动程序内的快捷方式后自动隐藏",
+        L"· 点击主窗口以外的任意位置自动隐藏",
+    };
+
+    int y = c.top + S(110);
+    for (int i = 0; i < (int)(sizeof(lines) / sizeof(lines[0])); i++)
+    {
+        RECT rl = { c.left, y, c.right, y + S(24) };
+        DrawText2(hdc, lines[i], rl,
+            i == 0 ? g_uiTextDim : g_uiTextFaint,
+            g_fontSmall, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        y += S(24);
+    }
+}
+
+static void PaintSettingsThemePage(HDC hdc, HWND hwnd)
+{
+    RECT c = SettingsContentRect(hwnd);
+
+    RECT rt = { c.left, c.top, c.right, c.top + S(28) };
+    DrawText2(hdc, L"主题调节", rt, g_uiText, g_fontTitle,
+        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+    RECT tracks[3];
+    SettingsSliderRects(hwnd, tracks);
+
+    // 黑白开关（位于“主题颜色”上方）
+    RECT gsw = SettingsGraySwitchRect(hwnd);
+    {
+        RECT rl = { c.left, gsw.top, gsw.left - S(12), gsw.bottom };
+        DrawText2(hdc, L"黑白模式", rl, g_uiTextDim, g_fontUI,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        PaintToggle(hdc, gsw, g_grayMode, g_setHover == 4);
+    }
+
+    const wchar_t* labels[3] = { L"窗口透明度", L"主题颜色", L"颜色亮度" };
+    if (g_grayMode) labels[1] = L"灰度";
+    wchar_t buf[32];
+
+    for (int k = 0; k < 3; k++)
+    {
+        RECT rl = { tracks[k].left, tracks[k].top - S(26),
+                    tracks[k].right, tracks[k].top - S(6) };
+        DrawText2(hdc, labels[k], rl, g_uiTextDim, g_fontUI,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        if (k == 1)
+        {
+            if (g_grayMode) swprintf_s(buf, L"%d%%", g_grayLevel);
+            else swprintf_s(buf, L"%d°", g_themeHue);
+        }
+        else if (k == 0)
+            swprintf_s(buf, L"%d%%", g_winOpacity);
+        else
+            swprintf_s(buf, L"%d%%", g_themeBright);
+
+        DrawText2(hdc, buf, rl, g_uiAccentText, g_fontUI,
+            DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+        DrawSettingsTrack(hdc, tracks[k], k);
+        DrawSettingsKnob(hdc, tracks[k], k);
+    }
+
+    // 右下角：恢复默认
+    RECT rb = SettingsResetRect(hwnd);
+    COLORREF fill = (g_setHover == 5) ? g_uiBtnHot : g_uiBtn;
+    FillRoundRect(hdc, rb, S(4), fill, fill);
+    DrawText2(hdc, L"恢复默认", rb, g_uiText, g_fontUI,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+static void PaintSettingsDlg(HDC hdc, HWND hwnd)
+{
+    RECT rc; GetClientRect(hwnd, &rc);
+
+    HBRUSH bg = CreateSolidBrush(g_uiDialogBg);
+    FillRect(hdc, &rc, bg);
+    DeleteObject(bg);
+
+    PaintDialogTitle(hdc, hwnd, L"设置", g_setHover == 2);
+
+    const wchar_t* nav[2] = { L"窗口模式", L"主题调节" };
+    for (int i = 0; i < 2; i++)
+    {
+        RECT ri = SettingsNavItemRect(hwnd, i);
+        if (i == g_setPage)
+            FillRoundRect(hdc, ri, S(6), g_uiNavSel, g_uiNavSel);
+        else if (i == g_setHover)
+            FillRoundRect(hdc, ri, S(6), g_uiNavHover, g_uiNavHover);
+
+        RECT rt = { ri.left + S(14), ri.top, ri.right - S(8), ri.bottom };
+        DrawText2(hdc, nav[i], rt,
+            (i == g_setPage) ? g_uiText : g_uiTextDim,
+            g_fontUI, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
+
+    // 左侧列表与右侧内容的分隔线
+    {
+        int x = S(16) + SetNavW() + S(11);
+        HPEN p = CreatePen(PS_SOLID, 1, g_uiSeparator);
+        HGDIOBJ op = SelectObject(hdc, p);
+        MoveToEx(hdc, x, DLG_TITLE_H + S(16), nullptr);
+        LineTo(hdc, x, rc.bottom - S(16));
+        SelectObject(hdc, op);
+        DeleteObject(p);
+    }
+
+    if (g_setPage == 0)
+        PaintSettingsTrayPage(hdc, hwnd);
+    else
+        PaintSettingsThemePage(hdc, hwnd);
+}
+
+// 命中测试：0/1=左侧选项 2=关闭 3=托盘开关 4=黑白开关 5=恢复默认
+//           10/11/12=滑条
+static int HitSettingsControl(HWND hwnd, POINT pt)
+{
+    RECT rc; GetClientRect(hwnd, &rc);
+    RECT rcClose = { rc.right - DLG_TITLE_H, 0, rc.right, DLG_TITLE_H };
+    if (PtInRect(&rcClose, pt)) return 2;
+
+    for (int i = 0; i < 2; i++)
+    {
+        RECT ri = SettingsNavItemRect(hwnd, i);
+        if (PtInRect(&ri, pt)) return i;
+    }
+
+    if (g_setPage == 0)
+    {
+        RECT sw = SettingsSwitchRect(hwnd);
+        InflateRect(&sw, S(4), S(6));
+        if (PtInRect(&sw, pt)) return 3;
+    }
+    else
+    {
+        RECT gsw = SettingsGraySwitchRect(hwnd);
+        InflateRect(&gsw, S(4), S(6));
+        if (PtInRect(&gsw, pt)) return 4;
+
+        RECT rb = SettingsResetRect(hwnd);
+        if (PtInRect(&rb, pt)) return 5;
+
+        RECT tracks[3];
+        SettingsSliderRects(hwnd, tracks);
+        for (int k = 0; k < 3; k++)
+        {
+            RECT hit = tracks[k];
+            hit.top -= S(14);
+            hit.bottom += S(14);
+            hit.left -= S(8);
+            hit.right += S(8);
+            if (PtInRect(&hit, pt)) return 10 + k;
+        }
+    }
+    return -1;
+}
+
+static void SetSettingsSliderFromX(HWND hwnd, int k, int x)
+{
+    RECT tracks[3];
+    SettingsSliderRects(hwnd, tracks);
+
+    int rad = S(SET_KNOB_R_BASE);
+    int left = tracks[k].left + rad;
+    int right = tracks[k].right - rad;
+    double t = (right > left) ? (double)(x - left) / (right - left) : 0.0;
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+
+    if (k == 0) g_winOpacity = (int)(t * 100.0 + 0.5);
+    else if (k == 1)
+    {
+        if (g_grayMode) g_grayLevel = (int)(t * 100.0 + 0.5);
+        else g_themeHue = (int)(t * 360.0 + 0.5);
+    }
+    else g_themeBright = (int)(t * 100.0 + 0.5);
+
+    if (g_winOpacity < 0) g_winOpacity = 0;
+    if (g_winOpacity > 100) g_winOpacity = 100;
+    if (g_themeHue < 0) g_themeHue = 0;
+    if (g_themeHue > 360) g_themeHue = 360;
+    if (g_grayLevel < 0) g_grayLevel = 0;
+    if (g_grayLevel > 100) g_grayLevel = 100;
+    if (g_themeBright < 0) g_themeBright = 0;
+    if (g_themeBright > 100) g_themeBright = 100;
+
+    ApplyThemeToMainWindow();
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static void ToggleTrayModeFromSettings(HWND hwnd)
+{
+    ApplyTrayMode(!g_trayMode);
+    SaveConfig();
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+static LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg)
+    {
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT rc; GetClientRect(hwnd, &rc);
+
+        HDC memDC = CreateCompatibleDC(hdc);
+        HBITMAP bmp = CreateCompatibleBitmap(hdc, max(1, rc.right), max(1, rc.bottom));
+        HGDIOBJ ob = SelectObject(memDC, bmp);
+
+        PaintSettingsDlg(memDC, hwnd);
+
+        BitBlt(hdc, 0, 0, rc.right, rc.bottom, memDC, 0, 0, SRCCOPY);
+
+        SelectObject(memDC, ob);
+        DeleteObject(bmp);
+        DeleteDC(memDC);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+
+    case WM_ERASEBKGND:
+        return 1;
+
+    case WM_NCHITTEST:
+    {
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+        ScreenToClient(hwnd, &pt);
+        RECT rc; GetClientRect(hwnd, &rc);
+        if (pt.y < DLG_TITLE_H && pt.x < rc.right - DLG_TITLE_H)
+            return HTCAPTION;
+        return HTCLIENT;
+    }
+
+    case WM_MOUSEMOVE:
+    {
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+
+        if (g_setDragSlider >= 0)
+        {
+            SetSettingsSliderFromX(hwnd, g_setDragSlider, pt.x);
+        }
+        else
+        {
+            int h = HitSettingsControl(hwnd, pt);
+            if (h != g_setHover)
+            {
+                g_setHover = h;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+        }
+
+        TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
+        TrackMouseEvent(&tme);
+        return 0;
+    }
+
+    case WM_MOUSELEAVE:
+        if (g_setHover != -1)
+        {
+            g_setHover = -1;
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        return 0;
+
+    case WM_LBUTTONDOWN:
+    {
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+        int id = HitSettingsControl(hwnd, pt);
+
+        if (id >= 10)
+        {
+            g_setDragSlider = id - 10;
+            SetSettingsSliderFromX(hwnd, g_setDragSlider, pt.x);
+            SetCapture(hwnd);
+        }
+        else if (id >= 0)
+        {
+            g_setPressed = id;
+            SetCapture(hwnd);
+        }
+        return 0;
+    }
+
+    case WM_LBUTTONUP:
+    {
+        POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+
+        if (g_setDragSlider >= 0)
+        {
+            g_setDragSlider = -1;
+            if (GetCapture() == hwnd) ReleaseCapture();
+            SaveConfig();
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+
+        if (g_setPressed >= 0)
+        {
+            int pressed = g_setPressed;
+            g_setPressed = -1;
+            if (GetCapture() == hwnd) ReleaseCapture();
+
+            if (HitSettingsControl(hwnd, pt) == pressed)
+            {
+                if (pressed == 0 || pressed == 1)
+                {
+                    g_setPage = pressed;
+                    g_setHover = -1;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+                else if (pressed == 2)
+                {
+                    DestroyWindow(hwnd);
+                }
+                else if (pressed == 3)
+                {
+                    ToggleTrayModeFromSettings(hwnd);
+                }
+                else if (pressed == 4)
+                {
+                    // 黑白模式开关
+                    g_grayMode = !g_grayMode;
+                    ApplyThemeToMainWindow();
+                    SaveConfig();
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+                else if (pressed == 5)
+                {
+                    // 恢复默认主题
+                    g_winOpacity = THEME_OPACITY_DEF;
+                    g_themeHue = THEME_HUE_DEF;
+                    g_themeBright = THEME_BRIGHT_DEF;
+                    g_grayMode = THEME_GRAYMODE_DEF;
+                    g_grayLevel = THEME_GRAY_DEF;
+                    ApplyThemeToMainWindow();
+                    SaveConfig();
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+            }
+        }
+        return 0;
+    }
+
+    case WM_CAPTURECHANGED:
+        g_setPressed = -1;
+        g_setDragSlider = -1;
+        return 0;
+
+    case WM_KEYDOWN:
+        if (wp == VK_ESCAPE) { DestroyWindow(hwnd); return 0; }
+        break;
+
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+
+    case WM_DESTROY:
+        g_hSettings = nullptr;
+        g_setHover = -1;
+        g_setPressed = -1;
+        g_setDragSlider = -1;
+        SaveConfig();
+        ActivateMainWindow();
+        return 0;
+    }
+
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void ShowSettingsDialog()
+{
+    if (g_hSettings) return;
+    if (!g_hWnd) return;
+
+    RECT rc; GetWindowRect(g_hWnd, &rc);
+    int w = S(SET_W_BASE), h = S(SET_H_BASE);
+    int x = rc.left + (rc.right - rc.left - w) / 2;
+    int y = rc.top + (rc.bottom - rc.top - h) / 2;
+
+    g_setPage = 0;
+    g_setHover = -1;
+    g_setPressed = -1;
+    g_setDragSlider = -1;
+
+    g_hSettings = CreateWindowExW(WS_EX_TOOLWINDOW,
+        L"SMSettingsDlg", L"设置", WS_POPUP,
+        x, y, w, h, g_hWnd, nullptr, g_hInst, nullptr);
+
+    if (!g_hSettings) return;
+
+    EnableWindow(g_hWnd, FALSE);
+    ShowWindow(g_hSettings, SW_SHOW);
+    SetFocus(g_hSettings);
+
+    RunModalLoop(g_hSettings);
+}
+
+// ============================================================
 //  文件缺失提示对话框（复用重命名窗口的直角自绘样式）
 // ============================================================
 static int HitMissingDlgButton(HWND hwnd, POINT pt)
@@ -1998,7 +3590,7 @@ static void PaintMissingDlg(HDC hdc, HWND hwnd)
 {
     RECT rc; GetClientRect(hwnd, &rc);
 
-    HBRUSH bg = CreateSolidBrush(RGB(34, 34, 38));
+    HBRUSH bg = CreateSolidBrush(g_uiDialogBg);
     FillRect(hdc, &rc, bg);
     DeleteObject(bg);
 
@@ -2009,16 +3601,16 @@ static void PaintMissingDlg(HDC hdc, HWND hwnd)
         RECT rt = { DLG_MARGIN, DLG_TITLE_H + S(16),
                     rc.right - DLG_MARGIN,
                     rc.bottom - DLG_MARGIN - DLG_BTN_H - S(12) };
-        DrawText2(hdc, g_missingDlgText, rt, RGB(220, 220, 225), g_fontUI,
+        DrawText2(hdc, g_missingDlgText, rt, g_uiText, g_fontUI,
             DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
     }
 
     // 否（左）
     {
         bool hot = (g_missingDlgHoverBtn == 1);
-        COLORREF fill = hot ? RGB(70, 70, 80) : RGB(55, 55, 62);
+        COLORREF fill = hot ? g_uiBtnHot : g_uiBtn;
         FillRoundRect(hdc, g_missingDlgBtnNo, S(4), fill, fill);
-        DrawText2(hdc, L"否", g_missingDlgBtnNo, RGB(225, 225, 230), g_fontUI,
+        DrawText2(hdc, L"否", g_missingDlgBtnNo, g_uiText, g_fontUI,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
@@ -2162,15 +3754,8 @@ static LRESULT CALLBACK MissingDlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
         g_hMissingDlg = nullptr;
         g_missingDlgHoverBtn = -1;
         g_missingDlgPressedBtn = -1;
-        g_missingDlgItems.clear();    // 清理残留
-        if (g_hWnd)
-        {
-            EnableWindow(g_hWnd, TRUE);
-            SetForegroundWindow(g_hWnd);
-            // 强制重绘主窗口，修复分层窗口在弹窗期间导致的背景透明问题
-            RedrawWindow(g_hWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_ERASE);
-            InvalidateRect(g_hWnd, nullptr, FALSE);
-        }
+        g_missingDlgItems.clear();
+        ActivateMainWindow();
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
@@ -2220,8 +3805,14 @@ static void ShowMissingFilesDialog(const std::vector<int>& items)
 
     EnableWindow(g_hWnd, FALSE);
     ShowWindow(g_hMissingDlg, SW_SHOW);
-    // 因为有父窗口且去除了 TOPMOST，不需要强制 SetForegroundWindow 挡住其他软件，
-    // 但需要 SetFocus 以便用户按回车或 Esc 响应
+
+    // 强制把提示窗提到最前（包括主窗口的显示动画层之上）
+    SetWindowPos(g_hMissingDlg, HWND_TOPMOST, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    // 立即取消 topmost，但 Z 序保持在主窗口上方
+    SetWindowPos(g_hMissingDlg, HWND_NOTOPMOST, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE);
+
     SetFocus(g_hMissingDlg);
 
     RunModalLoop(g_hMissingDlg);
@@ -2832,6 +4423,8 @@ static void SaveConfig()
     ss << L"[Window]\n";
     // 记录是否处于最大化，用于下次启动时还原窗口状态
     ss << L"Maximized=" << (maximized ? 1 : 0) << L"\n";
+    // 是否开启托盘模式
+    ss << L"TrayMode=" << (g_trayMode ? 1 : 0) << L"\n";
 
     if (!maximized && !minimized)
     {
@@ -2857,6 +4450,14 @@ static void SaveConfig()
         if (!xLine.empty()) ss << xLine << L"\n";
         if (!yLine.empty()) ss << yLine << L"\n";
     }
+
+    // 主题（透明度 / 色相 / 亮度 / 黑白模式）紧跟 [Window] 段
+    ss << L"\n[Color]\n";
+    ss << L"Opacity=" << g_winOpacity << L"\n";
+    ss << L"Hue=" << g_themeHue << L"\n";
+    ss << L"Brightness=" << g_themeBright << L"\n";
+    ss << L"Gray=" << (g_grayMode ? 1 : 0) << L"\n";
+    ss << L"GrayLevel=" << g_grayLevel << L"\n";
 
     for (size_t gi = 0; gi < g_groups.size(); ++gi) {
         const auto& group = g_groups[gi];
@@ -2896,6 +4497,8 @@ static void LoadConfig()
 
     Group currentGroup;
     bool inGrouping = false;
+    bool inWindow = false;
+    bool inColor = false;
     bool hasGroup = false;
 
     while (std::getline(ss, line)) {
@@ -2907,6 +4510,8 @@ static void LoadConfig()
         if (line.empty()) continue;
 
         if (line[0] == L'[') {
+            inWindow = (line == L"[Window]" || line == L"[Windows]");
+            inColor = (line == L"[Color]");
             if (line == L"[grouping]") {
                 if (hasGroup) {
                     g_groups.push_back(currentGroup);
@@ -2918,6 +4523,26 @@ static void LoadConfig()
             else {
                 inGrouping = false;
             }
+            continue;
+        }
+
+        if (inWindow) {
+            if (line.find(L"TrayMode=") == 0)
+                g_trayMode = (_wtoi(line.substr(9).c_str()) != 0);
+            continue;
+        }
+
+        if (inColor) {
+            if (line.find(L"Opacity=") == 0)
+                g_winOpacity = _wtoi(line.substr(8).c_str());
+            else if (line.find(L"Hue=") == 0)
+                g_themeHue = _wtoi(line.substr(4).c_str());
+            else if (line.find(L"Brightness=") == 0)
+                g_themeBright = _wtoi(line.substr(11).c_str());
+            else if (line.find(L"Gray=") == 0)
+                g_grayMode = (_wtoi(line.substr(5).c_str()) != 0);
+            else if (line.find(L"GrayLevel=") == 0)
+                g_grayLevel = _wtoi(line.substr(10).c_str());
             continue;
         }
 
@@ -2979,6 +4604,16 @@ static void LoadConfig()
     }
 
     RemoveEmptyGroups();
+
+    // 修正主题参数到合法范围
+    if (g_winOpacity < 0) g_winOpacity = 0;
+    if (g_winOpacity > 100) g_winOpacity = 100;
+    if (g_themeHue < 0) g_themeHue = 0;
+    if (g_themeHue > 360) g_themeHue = 360;
+    if (g_themeBright < 0) g_themeBright = 0;
+    if (g_themeBright > 100) g_themeBright = 100;
+    if (g_grayLevel < 0) g_grayLevel = 0;
+    if (g_grayLevel > 100) g_grayLevel = 100;
 }
 
 // ============================================================
@@ -3020,6 +4655,9 @@ static void UpdateHover(POINT pt)
     g_hoverBtn = HitButton(pt);
     g_hoverLetter = HitLetter(pt);
     g_hoverListIdx = HitListItem(pt);
+    g_hoverSearch = HitSearchBox(pt);
+    g_hoverSearchClear = HitSearchClear(pt);
+    g_hoverSettingsBtn = HitSettingsButton(pt);
 
     int tg = -1, ti = -1;
     HitTile(pt, tg, ti);
@@ -3027,14 +4665,227 @@ static void UpdateHover(POINT pt)
     g_hoverTileI = ti;
 }
 
+// ============================================================
+//  搜索输入框（EDIT 子窗口，外壳由父窗口自绘）
+// ============================================================
+static void ClearSearch();
+
+static void OnSearchChanged()
+{
+    if (!g_hSearchEdit) return;
+
+    wchar_t buf[256] = { 0 };
+    GetWindowTextW(g_hSearchEdit, buf, 256);
+
+    std::wstring s = buf;
+    if (s == g_searchText) return;
+    g_searchText = s;
+
+    if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+}
+
+static void ClearSearch()
+{
+    if (!g_hSearchEdit) return;
+
+    // 置空文本会触发 EN_CHANGE，从而清空 g_searchText 并重绘
+    SetWindowTextW(g_hSearchEdit, L"");
+    if (!g_searchText.empty())
+    {
+        g_searchText.clear();
+        if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+    }
+}
+
+// 把输入框摆到胶囊形外壳内部（左侧文字区）
+static void UpdateSearchEditLayout()
+{
+    if (!g_hSearchEdit) return;
+
+    RECT box = GetSearchBoxRect();
+    RECT clearRc = GetSearchClearRect();
+
+    int x = box.left + S(22);
+    int right = clearRc.left - S(4);
+    if (right < x + S(40)) right = x + S(40);
+
+    HDC hdc = GetDC(g_hSearchEdit);
+    TEXTMETRICW tm = { 0 };
+    if (hdc)
+    {
+        HFONT old = (HFONT)SelectObject(hdc, g_fontUI);
+        GetTextMetricsW(hdc, &tm);
+        SelectObject(hdc, old);
+        ReleaseDC(g_hSearchEdit, hdc);
+    }
+
+    // 单行 EDIT 的文本总是从客户区顶部开始绘制，所以这里按字体行高
+    // 反推窗口位置，让整行文字（含光标的行盒）正好落在搜索框垂直中线上。
+    int textH = tm.tmHeight;
+    if (textH <= 0) textH = S(16);
+
+    int th = textH + S(2);
+    if (th < S(16)) th = S(16);
+
+    // 四舍五入，避免 /2 截断导致文字整体偏上 1~2 像素
+    int y = (box.top + box.bottom - textH + 1) / 2;
+
+    SendMessageW(g_hSearchEdit, WM_SETFONT, (WPARAM)g_fontUI, TRUE);
+    SetWindowPos(g_hSearchEdit, nullptr, x, y, right - x, th,
+        SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+static LRESULT CALLBACK SearchEditSubclassProc(HWND hwnd, UINT msg, WPARAM wp,
+    LPARAM lp, UINT_PTR id, DWORD_PTR ref)
+{
+    switch (msg)
+    {
+    case WM_KEYDOWN:
+        if (wp == VK_ESCAPE) { ClearSearch(); return 0; }
+        if (wp == VK_RETURN) return 0;
+        break;
+
+    case WM_CHAR:
+        // 单行搜索框：屏蔽回车/换行
+        if (wp == VK_RETURN || wp == L'\r' || wp == L'\n') return 0;
+        break;
+
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+        if (g_hWnd) InvalidateRect(g_hWnd, nullptr, FALSE);
+        break;
+
+    case WM_MOUSEMOVE:
+    {
+        // 鼠标在输入框上移动时也要刷新搜索框的悬停高亮
+        POINT pt; GetCursorPos(&pt);
+        if (g_hWnd) ScreenToClient(g_hWnd, &pt);
+        RefreshSearchHover(pt);
+
+        TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, hwnd, 0 };
+        TrackMouseEvent(&tme);
+        break;
+    }
+
+    case WM_MOUSELEAVE:
+    {
+        POINT pt; GetCursorPos(&pt);
+        if (g_hWnd) ScreenToClient(g_hWnd, &pt);
+        RefreshSearchHover(pt);
+        break;
+    }
+
+    case WM_IME_STARTCOMPOSITION:
+        g_searchComposing = true;
+        break;
+
+    case WM_IME_ENDCOMPOSITION:
+        g_searchComposing = false;
+        break;
+
+    case WM_PAINT:
+    {
+        LRESULT r = DefSubclassProc(hwnd, msg, wp, lp);
+
+        // 内容为空时在左侧显示「搜索」提示文字；
+        // 输入法组字过程中不绘制，避免与组字串重叠
+        if (!g_searchComposing)
+        {
+            wchar_t buf[2] = { 0 };
+            if (GetWindowTextW(hwnd, buf, 2) == 0)
+            {
+                HDC hdc = GetDC(hwnd);
+                if (hdc)
+                {
+                    RECT rct; GetClientRect(hwnd, &rct);
+                    SetBkMode(hdc, TRANSPARENT);
+                    SetTextColor(hdc, g_uiTextFaint);
+                    HFONT old = (HFONT)SelectObject(hdc, g_fontUI);
+                    // 与 EDIT 自身的文字一样从客户区顶部开始绘制，保证提示文字
+                    // 与输入后的文字在同一基线上
+                    DrawTextW(hdc, L"搜索", -1, &rct,
+                        DT_LEFT | DT_TOP | DT_SINGLELINE);
+                    SelectObject(hdc, old);
+                    ReleaseDC(hwnd, hdc);
+                }
+            }
+        }
+        return r;
+    }
+    }
+
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static void CreateSearchEdit()
+{
+    if (g_hSearchEdit) return;
+
+    RECT box = GetSearchBoxRect();
+    g_hSearchEdit = CreateWindowExW(0, L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOHSCROLL,
+        box.left + S(22), box.top + S(8), S(80), S(20),
+        g_hWnd, (HMENU)(INT_PTR)1001, g_hInst, nullptr);
+    if (!g_hSearchEdit) return;
+
+    SendMessageW(g_hSearchEdit, WM_SETFONT, (WPARAM)g_fontUI, TRUE);
+    SetWindowSubclass(g_hSearchEdit, SearchEditSubclassProc, 1, 0);
+    UpdateSearchEditLayout();
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
+    // 资源管理器重启后会广播 TaskbarCreated，需要重新添加托盘图标
+    if (g_wmTaskbarCreated && msg == g_wmTaskbarCreated)
+    {
+        if (g_trayMode)
+        {
+            g_trayIconAdded = false;
+            AddTrayIcon();
+        }
+        return 0;
+    }
+
     switch (msg)
     {
     case WM_CREATE:
         DragAcceptFiles(hwnd, TRUE);
         SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_hIconBig);
         SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_hIconSmall);
+        return 0;
+
+    case WM_ACTIVATE:
+    {
+        if (LOWORD(wp) == WA_INACTIVE)
+        {
+            // 托盘模式：点击主窗口以外的位置时自动隐藏
+            // g_mainWasActive 用于避免程序刚启动、尚未获得焦点时就被隐藏
+            if (g_trayMode && g_mainWasActive && !g_reallyExit && !g_hSettings)
+            {
+                HWND next = (HWND)lp;
+                DWORD pid = 0;
+                if (next) GetWindowThreadProcessId(next, &pid);
+                if (pid != GetCurrentProcessId())
+                    HideMainWindow();
+            }
+        }
+        else
+        {
+            g_mainWasActive = true;
+        }
+        break;
+    }
+
+    case WM_TRAYICON:
+        if (LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_RBUTTONUP)
+        {
+            POINT pt; GetCursorPos(&pt);
+            ShowTrayMenu(pt);
+        }
+        return 0;
+
+    case WM_TOGGLE_MAIN:
+        ToggleMainWindow();
         return 0;
 
     case WM_GETICON:
@@ -3064,13 +4915,35 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
 
+    case WM_TIMER:
+    {
+        if (wp == 1001)
+        {
+            static int nTick = 0;
+            nTick++;
+
+            // 至少等 3 个 tick（约 300ms），覆盖 DWM 窗口显示动画
+            if (nTick < 3) return 0;
+
+            // 500ms 后如果主窗口还不是前台，继续等（再等约 2.5 秒兜底）
+            if (GetForegroundWindow() != hwnd && nTick < 30)
+                return 0;
+
+            nTick = 0;
+            KillTimer(hwnd, 1001);
+            PostMessage(hwnd, WM_STARTUP_CHECK, 0, 0);
+        }
+        return 0;
+    }
+
     case WM_NCACTIVATE:
         // 阻止系统默认的对非客户区的重绘，否则会导致 WS_EX_LAYERED 窗口失去焦点时变透明
         return TRUE;
 
     case WM_ENABLE:
         if (wp) {
-            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_ERASE);
+            // 仅标记重绘，避免弹窗关闭激活主窗口时强制刷新引起闪烁
+            InvalidateRect(hwnd, NULL, FALSE);
         }
         return 0;
 
@@ -3103,6 +4976,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
 
         LayoutGroups();
+        UpdateSearchEditLayout();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -3117,6 +4991,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (g_listScroll < 0) g_listScroll = 0;
 
         LayoutGroups();
+        UpdateSearchEditLayout();
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -3137,6 +5012,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_SYSCOMMAND:
     {
         UINT cmd = (UINT)(wp & 0xFFF0);
+
+        // 托盘模式：系统菜单的最小化/关闭也只隐藏窗口
+        if (g_trayMode && cmd == SC_MINIMIZE)
+        {
+            HideMainWindow();
+            return 0;
+        }
+
         if (cmd == SC_MAXIMIZE || cmd == SC_RESTORE)
         {
             LRESULT r = DefWindowProcW(hwnd, msg, wp, lp);
@@ -3279,7 +5162,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             {
                 int trackH = rcTrack.bottom - rcTrack.top;
                 int thumbH = rcThumb.bottom - rcThumb.top;
-                int viewH = rc.bottom - TITLE_H;
+                int viewH = TileViewH();
                 int maxScroll = g_tileContentH - viewH;
                 int span = trackH - thumbH;
                 if (span > 0 && maxScroll > 0)
@@ -3373,6 +5256,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         g_hoverListIdx = -1;
         g_hoverTileG = -1;
         g_hoverTileI = -1;
+        g_hoverSettingsBtn = false;
+
+        // 鼠标可能只是移动到了搜索框的 EDIT 子窗口上，
+        // 用真实光标位置判断，避免边框闪烁
+        POINT pt; GetCursorPos(&pt);
+        ScreenToClient(hwnd, &pt);
+        RefreshSearchHover(pt);
+
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
     }
@@ -3380,6 +5271,29 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDOWN:
     {
         POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
+
+        // 搜索框左侧的齿轮设置按钮
+        if (HitSettingsButton(pt))
+        {
+            SetFocus(hwnd);
+            ShowSettingsDialog();
+            return 0;
+        }
+
+        // 搜索框：点右侧的叉清空搜索；点其它位置把焦点交给输入框
+        if (g_hSearchEdit && HitSearchBox(pt))
+        {
+            if (HitSearchClear(pt))
+            {
+                ClearSearch();
+                SetFocus(g_hSearchEdit);
+                return 0;
+            }
+            SetFocus(g_hSearchEdit);
+            SendMessageW(g_hSearchEdit, EM_SETSEL, (WPARAM)-1, (LPARAM)-1);
+            return 0;
+        }
+
         SetFocus(hwnd);
 
         int b = HitButton(pt);
@@ -3436,7 +5350,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 else if (PtInRect(&rcTrack, pt))
                 {
                     RECT rc; GetClientRect(hwnd, &rc);
-                    int viewH = rc.bottom - TITLE_H;
+                    int viewH = TileViewH();
                     int maxScroll = g_tileContentH - viewH;
                     if (pt.y < rcThumb.top)
                         g_tileScroll -= viewH;
@@ -3509,7 +5423,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int b = HitButton(pt);
             if (b == pressed)
             {
-                if (b == 1) ShowWindow(hwnd, SW_MINIMIZE);
+                if (b == 1)
+                {
+                    // 托盘模式：最小化按钮只隐藏窗口
+                    if (g_trayMode) HideMainWindow();
+                    else ShowWindow(hwnd, SW_MINIMIZE);
+                }
                 else if (b == 2) ToggleMaximize();
                 else if (b == 3) PostMessageW(hwnd, WM_CLOSE, 0, 0);
             }
@@ -3633,7 +5552,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         else
         {
             RECT rc; GetClientRect(hwnd, &rc);
-            int viewH = rc.bottom - TITLE_H;
+            int viewH = TileViewH();
             int maxScroll = g_tileContentH - viewH;
             if (maxScroll < 0) maxScroll = 0;
 
@@ -3675,21 +5594,42 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CTLCOLOREDIT:
     {
         HDC hdc = (HDC)wp;
-        SetTextColor(hdc, RGB(230, 230, 235));
-        SetBkColor(hdc, RGB(45, 45, 52));
-        static HBRUSH hbr = CreateSolidBrush(RGB(45, 45, 52));
-        return (LRESULT)hbr;
+        SetTextColor(hdc, g_uiText);
+        SetBkColor(hdc, g_uiSurface);
+        return (LRESULT)g_hbrEdit;
+    }
+
+    case WM_COMMAND:
+    {
+        if (g_hSearchEdit && (HWND)lp == g_hSearchEdit)
+        {
+            WORD code = HIWORD(wp);
+            if (code == EN_CHANGE) OnSearchChanged();
+            else if (code == EN_SETFOCUS || code == EN_KILLFOCUS)
+                InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+        break;
     }
 
     case WM_CLOSE:
         // 关闭前若仍处于分组名行内编辑状态，先提交
         if (g_hEdit) EndEditGroupName(true);
         SaveConfig();
+
+        // 托盘模式：关闭按钮只隐藏窗口，真正退出请用托盘菜单
+        if (g_trayMode && !g_reallyExit)
+        {
+            HideMainWindow();
+            return 0;
+        }
         DestroyWindow(hwnd);
         return 0;
 
     case WM_DESTROY:
-        // 注销 OLE 拖放目标
+        KillTimer(hwnd, 1001);   // 清理启动检查定时器
+        RemoveTrayIcon();
+        UninstallTrayHotkey();
         RevokeDragDrop(hwnd);
         if (g_pDropTarget)
         {
@@ -3838,6 +5778,20 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
     mdc.hIcon = g_hIconBig;
     RegisterClassExW(&mdc);
 
+    // 设置窗口类
+    WNDCLASSEXW sdc = { 0 };
+    sdc.cbSize = sizeof(sdc);
+    sdc.lpfnWndProc = SettingsProc;
+    sdc.hInstance = hInst;
+    sdc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    sdc.lpszClassName = L"SMSettingsDlg";
+    sdc.hbrBackground = nullptr;
+    sdc.hIcon = g_hIconBig;
+    RegisterClassExW(&sdc);
+
+    // 资源管理器重启广播：用于重新添加托盘图标
+    g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+
     int w = MulDiv(DEFAULT_W, g_dpi, 96), h = MulDiv(DEFAULT_H, g_dpi, 96);
     int x = -10000, y = -10000;
     bool startMaximized = false;   // 上次关闭时窗口是否处于最大化状态
@@ -3847,8 +5801,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
         std::wstring line;
         bool inWin = false;
         while (std::getline(ss, line)) {
-            if (line == L"[Window]") { inWin = true; continue; }
-            if (!line.empty() && line[0] == L'[' && line != L"[Window]") { inWin = false; }
+            if (line == L"[Window]" || line == L"[Windows]") { inWin = true; continue; }
+            if (!line.empty() && line[0] == L'[' &&
+                line != L"[Window]" && line != L"[Windows]") { inWin = false; }
             if (inWin) {
                 // 读取最大化状态；宽高保存在配置文件中为 96 DPI 逻辑单位，此处还原为物理像素
                 if (line.find(L"Maximized=") == 0)
@@ -3875,7 +5830,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
 
     g_hWnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_APPWINDOW,
         L"SMStartMenu", L"开始菜单",
-        WS_OVERLAPPEDWINDOW,
+        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         x, y, w, h,
         nullptr, nullptr, hInst, nullptr);
 
@@ -3921,15 +5876,21 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int)
         }
     }
 
+    // 创建搜索框（右侧磁贴区域底部）
+    CreateSearchEdit();
+
+    // 应用主题（窗口背景色 / 不透明度）与托盘模式设置
+    UpdateThemeColor();
+    ApplyWindowAlpha();
+    if (g_trayMode) ApplyTrayMode(true);
+
     // 若上次关闭时处于最大化状态，则直接以最大化显示
     ShowWindow(g_hWnd, startMaximized ? SW_SHOWMAXIMIZED : SW_SHOW);
     UpdateWindow(g_hWnd);
 
-    // ============================================================
-    //  将缺失文件的检查推迟到消息循环中，确保主窗口的首次自绘已经完成。
-    //  直接在这里阻塞弹窗会导致主窗口未完成初始化，进而导致样式错乱（背景透明等）。
-    // ============================================================
-    PostMessage(g_hWnd, WM_STARTUP_CHECK, 0, 0);
+    // 延迟触发启动检查：等主窗口显示动画/激活完成后再弹提示框，
+    // 避免提示框先创建在主窗口下面、动画结束后又翻到上面的视觉跳动
+    SetTimer(g_hWnd, 1001, 100, nullptr);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0))
